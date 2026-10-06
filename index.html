@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
-  <title>六記 · 同事訂飯系統</title>
+  <title>HO YU PANDA V1.02</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
@@ -249,6 +249,7 @@
             <label>選擇或輸入 Initial</label>
             <input list="initialList" id="userInitial" placeholder="例如 CKH" autocomplete="off" />
             <datalist id="initialList"></datalist>
+            <p style="font-size:.75rem;color:var(--muted);margin-top:4px">會自動帶出你上次嘅飲品習慣（如凍奶茶少冰少甜）</p>
           </div>
           <div>
             <label>顯示名稱（可選）</label>
@@ -512,6 +513,8 @@
     let localOrders = JSON.parse(localStorage.getItem('lunch_orders') || '[]');
     let pickupPerson = localStorage.getItem('lunch_pickup') || '';
     let knownInitials = JSON.parse(localStorage.getItem('lunch_initials') || '[]');
+    // 每人飲品習慣：{ CKH: { drink, ice, sweet, drinkNote } }
+    let drinkPrefs = JSON.parse(localStorage.getItem('lunch_drink_prefs') || '{}');
 
     // ===================== 初始化 =====================
     document.addEventListener('DOMContentLoaded', () => {
@@ -539,8 +542,10 @@
         populateDateSelects();
         renderMeals();
         await loadOrders();
+        learnDrinkPrefsFromOrders();
         await loadDebts();
         generateExport();
+        applyDrinkPrefForInitial();
         if (!ok && !isInAppBrowser()) {
           const tip = isChromeMobile()
             ? '❌ Chrome 一般模式連線失敗（無痕正常多半是快取）。請撳「清除快取並重載」，或設定→網站設定→清除並重新整理。'
@@ -623,9 +628,103 @@
         const v = document.getElementById('drinkSelect').value;
         document.getElementById('drinkOpts').style.display = v ? 'grid' : 'none';
         calcPrice();
+        // 即時記住（改飲品時）
+        saveDrinkPrefFromForm();
       });
-      document.getElementById('iceLevel').addEventListener('change', calcPrice);
-      document.getElementById('sweetLevel').addEventListener('change', calcPrice);
+      document.getElementById('iceLevel').addEventListener('change', () => { calcPrice(); saveDrinkPrefFromForm(); });
+      document.getElementById('sweetLevel').addEventListener('change', () => { calcPrice(); saveDrinkPrefFromForm(); });
+      const dn = document.getElementById('drinkNote');
+      if (dn) dn.addEventListener('change', saveDrinkPrefFromForm);
+
+      const ini = document.getElementById('userInitial');
+      ini.addEventListener('change', () => applyDrinkPrefForInitial());
+      ini.addEventListener('blur', () => applyDrinkPrefForInitial());
+      // 用 datalist 選完有時只觸發 input
+      let _iniTimer = null;
+      ini.addEventListener('input', () => {
+        clearTimeout(_iniTimer);
+        _iniTimer = setTimeout(() => applyDrinkPrefForInitial(), 400);
+      });
+    }
+
+    function saveDrinkPrefFromForm() {
+      const initial = document.getElementById('userInitial').value.trim().toUpperCase();
+      if (!initial) return;
+      const drink = document.getElementById('drinkSelect').value;
+      // 即使唔要飲品都記住（下次照樣唔要）
+      drinkPrefs[initial] = {
+        drink: drink || '',
+        ice: document.getElementById('iceLevel').value || '正常',
+        sweet: document.getElementById('sweetLevel').value || '正常',
+        drinkNote: (document.getElementById('drinkNote').value || '').trim()
+      };
+      try { localStorage.setItem('lunch_drink_prefs', JSON.stringify(drinkPrefs)); } catch (e) {}
+    }
+
+    function applyDrinkPrefForInitial() {
+      const initial = document.getElementById('userInitial').value.trim().toUpperCase();
+      if (!initial) return;
+      const pref = drinkPrefs[initial];
+      if (!pref) {
+        // 試從歷史訂單推斷
+        const hist = localOrders.filter(o => String(o.initial).toUpperCase() === initial && o.drink)
+          .sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
+        if (hist.length) {
+          const parsed = parseDrinkString(hist[0].drink);
+          if (parsed) {
+            drinkPrefs[initial] = parsed;
+            try { localStorage.setItem('lunch_drink_prefs', JSON.stringify(drinkPrefs)); } catch (e) {}
+          }
+        }
+      }
+      const p = drinkPrefs[initial];
+      if (!p) return;
+      const sel = document.getElementById('drinkSelect');
+      // 確認選項存在
+      const hasOpt = [...sel.options].some(o => o.value === p.drink);
+      if (p.drink && hasOpt) {
+        sel.value = p.drink;
+      } else if (!p.drink) {
+        sel.value = '';
+      }
+      document.getElementById('drinkOpts').style.display = sel.value ? 'grid' : 'none';
+      if (p.ice) {
+        const ice = document.getElementById('iceLevel');
+        if ([...ice.options].some(o => o.value === p.ice)) ice.value = p.ice;
+      }
+      if (p.sweet) {
+        const sw = document.getElementById('sweetLevel');
+        if ([...sw.options].some(o => o.value === p.sweet)) sw.value = p.sweet;
+      }
+      if (p.drinkNote != null) document.getElementById('drinkNote').value = p.drinkNote;
+      calcPrice();
+    }
+
+    /** 從訂單字串還原，例如「凍奶茶（少冰・少糖） 走茶漬」 */
+    function parseDrinkString(str) {
+      if (!str || typeof str !== 'string') return null;
+      const s = str.trim();
+      // 凍奶茶（少冰・少糖） or 凍奶茶（少冰・少糖） note
+      const m = s.match(/^(.+?)(?:（([^）]+)）)?(?:\s+(.+))?$/);
+      if (!m) return { drink: s, ice: '正常', sweet: '正常', drinkNote: '' };
+      let drink = (m[1] || '').trim();
+      let ice = '正常', sweet = '正常';
+      const mid = m[2] || '';
+      if (mid) {
+        const parts = mid.split(/[・·‧/／,，\s]+/).filter(Boolean);
+        parts.forEach(p => {
+          if (/冰|走冰/.test(p)) ice = p;
+          else if (/糖|甜/.test(p)) sweet = p;
+        });
+      }
+      // 對齊 select options
+      const drinkSel = document.getElementById('drinkSelect');
+      if (drinkSel && ![...drinkSel.options].some(o => o.value === drink)) {
+        // 模糊：凍奶茶
+        const found = [...drinkSel.options].find(o => o.value && drink.indexOf(o.value) >= 0);
+        if (found) drink = found.value;
+      }
+      return { drink, ice, sweet, drinkNote: (m[3] || '').trim() };
     }
 
     function setupMealChange() {
@@ -889,6 +988,26 @@
       document.getElementById('bulkHintRow').style.display = 'none';
     }
 
+
+    /** 從歷史訂單學習每人最近一次飲品 */
+    function learnDrinkPrefsFromOrders() {
+      const latest = {};
+      localOrders.forEach(o => {
+        if (!o.initial || !o.drink) return;
+        const k = String(o.initial).toUpperCase();
+        const ts = o.timestamp || '';
+        if (!latest[k] || String(ts) > String(latest[k].ts)) {
+          latest[k] = { ts, drink: o.drink };
+        }
+      });
+      Object.keys(latest).forEach(k => {
+        if (drinkPrefs[k] && drinkPrefs[k].drink) return; // 已有手動習慣優先
+        const parsed = parseDrinkString(latest[k].drink);
+        if (parsed) drinkPrefs[k] = parsed;
+      });
+      try { localStorage.setItem('lunch_drink_prefs', JSON.stringify(drinkPrefs)); } catch (e) {}
+    }
+
     // ===================== 落單 =====================
     async function submitOrder() {
       const initial = document.getElementById('userInitial').value.trim().toUpperCase();
@@ -959,13 +1078,22 @@
         toast('✅ 已落單（本地模式）');
       }
 
-      // reset
+      // 記住呢次飲品習慣
+      saveDrinkPrefFromForm();
+      // 同步到 Sheet（方便其他手機）
+      if (apiUrl) {
+        const pref = drinkPrefs[initial];
+        if (pref) {
+          callApi('setSetting', { key: 'drinkpref_' + initial, value: JSON.stringify(pref) }).catch(() => {});
+        }
+      }
+
+      // reset 飯餐；飲品跟返該人習慣（方便連續點第二日）
       document.querySelectorAll('.meal-item').forEach(el => el.classList.remove('selected'));
       document.querySelectorAll('input[name="meal"]').forEach(r => r.checked = false);
       selectedMeal = null;
-      document.getElementById('drinkSelect').value = '';
-      document.getElementById('drinkOpts').style.display = 'none';
       document.getElementById('orderNote').value = '';
+      applyDrinkPrefForInitial();
       calcPrice();
     }
 
