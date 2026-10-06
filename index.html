@@ -430,7 +430,7 @@
           <button class="btn btn-success btn-block" onclick="copyExport()">📋 複製到剪貼簿</button>
         </div>
         <p style="font-size:.8rem;color:var(--muted);margin-top:10px">
-          預設備註：12:15-12:45 送到，可放可風中學門口，直行 5-10 步轉右走廊上的長枱（放外賣專用，電聯未必有人即時聽）
+          預設備註：12:15-12:45 送到，可放可聯中學門口，直行 5-10 步轉右走廊上的長枱（放外賣專用，電聯未必有人即時聽）
         </p>
       </div>
     </div>
@@ -1486,10 +1486,8 @@
     function generateExport() {
       const date = document.getElementById('exportDate').value;
       let orders = localOrders.filter(o => o.date === date);
-      // 若有 API，嘗試拉最新（失敗就用本地）
       const d = new Date(date + 'T12:00:00');
       let text = `【六記訂飯】${formatDateLabel(d)}\n`;
-      text += `電話：24362000 / WhatsApp 55018351\n`;
       text += `────────────────\n`;
 
       if (!orders.length) {
@@ -1504,34 +1502,40 @@
           const key = `${o.mealCode}. ${o.mealName}`;
           mealCount[key] = (mealCount[key] || 0) + 1;
         });
-        Object.entries(mealCount).forEach(([k,v]) => {
+        Object.entries(mealCount).forEach(([k, v]) => {
           text += `${v} × ${k}\n`;
         });
 
-        // 饮品
-        const drinks = orders.filter(o => o.drink).map(o => o.drink);
-        if (drinks.length) {
+        // 飲品：同類合併，例如 凍檸茶（正常・少糖） ×3
+        const drinkCount = {};
+        orders.forEach(o => {
+          if (!o.drink) return;
+          const key = String(o.drink).trim();
+          drinkCount[key] = (drinkCount[key] || 0) + 1;
+        });
+        const drinkKeys = Object.keys(drinkCount);
+        if (drinkKeys.length) {
           text += `\n飲品：\n`;
-          drinks.forEach(dr => text += `• ${dr}\n`);
+          drinkKeys.forEach(k => {
+            const n = drinkCount[k];
+            text += n > 1 ? `• ${k} ×${n}\n` : `• ${k}\n`;
+          });
         }
 
-        // 價錢摘要
-        const rawSum = orders.reduce((s,o) => s + (o.total || 0), 0);
-        const effectiveSum = orders.reduce((s,o) => s + getEffectiveTotal(o, dayCount), 0);
         text += `\n共 ${dayCount} 份`;
         if (hasBulk) {
           text += `（已達滿${BULK_THRESHOLD}份，每飯 −$${BULK_DISCOUNT}）\n`;
-          text += `應付合計：$${effectiveSum}（原價 $${rawSum}）\n`;
         } else {
-          text += `\n合計：$${rawSum}\n`;
-          text += `（未滿${BULK_THRESHOLD}份，未享每飯減$${BULK_DISCOUNT}）\n`;
+          text += `\n`;
         }
       }
 
       text += `────────────────\n`;
       text += `備註：12:15-12:45 送到\n`;
-      text += `可放可風中學門口，直行5-10步轉右走廊上的長枱（放外賣專用，電聯未必有人即時聽）\n`;
-      if (pickupPerson) text += `拎飯人：${pickupPerson}\n`;
+      text += `可放可聯中學門口，直行5-10步轉右走廊上的長枱（放外賣專用，電聯未必有人即時聽）\n`;
+      // 拎飯人：優先當日設定
+      const dayPickup = (typeof pickupByDateMap !== 'undefined' && pickupByDateMap[date]) || pickupPerson;
+      if (dayPickup) text += `拎飯人：${dayPickup}\n`;
 
       document.getElementById('exportText').value = text;
     }
