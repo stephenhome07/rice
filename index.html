@@ -224,7 +224,7 @@
       <span id="connMsg"></span>
       <span style="display:flex;gap:6px;flex-wrap:wrap;">
         <button class="btn btn-secondary" style="padding:6px 10px;font-size:.8rem" onclick="retryConnection()">重新連線</button>
-        <button class="btn btn-primary" style="padding:6px 10px;font-size:.8rem" onclick="openInBrowser()">用瀏覽器開啟</button>
+        <button class="btn btn-primary" style="padding:6px 10px;font-size:.8rem" onclick="hardResetSite()">清除快取並重載</button>
       </span>
     </div>
       <button class="btn btn-secondary" style="padding:6px 12px;font-size:.85rem" onclick="editPickup()">更改</button>
@@ -465,6 +465,10 @@
         <h2>系統</h2>
         <button class="btn btn-secondary" onclick="document.getElementById('configBox').classList.remove('hidden')">重新設定 API 網址</button>
         <button class="btn btn-secondary" onclick="clearLocalCache()">清除本機快取</button>
+        <button class="btn btn-primary" style="margin-top:8px" onclick="hardResetSite()">🔧 Chrome 連線修復（清除快取並強制重載）</button>
+        <p style="font-size:.8rem;color:var(--muted);margin-top:8px">
+          若「無痕正常、一般模式失敗」：多半是 Chrome 快取或擴充功能。請用上面按鈕，或 Chrome → 鎖頭/網站設定 → 清除資料。
+        </p>
       </div>
     </div>
   </div>
@@ -539,8 +543,8 @@
         generateExport();
         if (!ok && !isInAppBrowser()) {
           const tip = isChromeMobile()
-            ? '❌ Chrome 連線不穩。可試「重新連線」，或改用 Samsung Internet；亦可關閉 Chrome「安全 DNS」。'
-            : '❌ 連不上 Google Sheet。可試「重新連線」，或改用系統瀏覽器。';
+            ? '❌ Chrome 一般模式連線失敗（無痕正常多半是快取）。請撳「清除快取並重載」，或設定→網站設定→清除並重新整理。'
+            : '❌ 連不上 Google Sheet。可試「重新連線」或「清除快取並重載」。';
           showConnBar(tip, 'err');
         }
       })();
@@ -1715,15 +1719,35 @@
     }
 
     function clearLocalCache() {
-      if (!confirm('清除本機快取？\n（不會刪除 Google Sheet 的資料；重新整理後會再從 Sheet 載入）')) return;
-      localStorage.removeItem('lunch_orders');
-      localStorage.removeItem('lunch_initials');
-      localStorage.removeItem('lunch_pickup');
-      localStorage.removeItem('lunch_menus_cache');
-      localOrders = [];
-      knownInitials = [];
-      pickupPerson = '';
-      location.reload();
+      if (!confirm('清除本機快取？\n（不會刪除 Google Sheet 的資料）')) return;
+      hardResetSite(false);
+    }
+
+    /** Chrome 一般模式快取／擴充功能搞事時用：清光本站資料 + 強制換網址重載 */
+    async function hardResetSite(ask) {
+      if (ask !== false) {
+        if (!confirm('清除此網站在 Chrome 的所有本機資料並強制重新載入？\n（解決：一般模式失敗、無痕卻正常）\n不會刪除 Google Sheet。')) return;
+      }
+      try {
+        const keys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && (k.indexOf('lunch') >= 0 || k.indexOf('api') >= 0)) keys.push(k);
+        }
+        keys.forEach(k => localStorage.removeItem(k));
+        localStorage.setItem('lunch_api_url', DEFAULT_API_URL);
+        localStorage.setItem('lunch_cache_bust', String(Date.now()));
+      } catch (e) { console.warn(e); }
+      try {
+        if (window.caches && caches.keys) {
+          const names = await caches.keys();
+          await Promise.all(names.map(n => caches.delete(n)));
+        }
+      } catch (e) { console.warn(e); }
+      // 強制換 query，避開 Chrome 磁碟快取
+      const u = new URL(location.href);
+      u.searchParams.set('_r', String(Date.now()));
+      location.replace(u.toString());
     }
 
     function toast(msg) {
