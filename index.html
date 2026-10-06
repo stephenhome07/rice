@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
-  <title>HO YU PANDA V1.02</title>
+  <title>六記 · 同事訂飯系統</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
@@ -1009,10 +1009,16 @@
     }
 
     // ===================== 落單 =====================
+    let _submitting = false;
     async function submitOrder() {
+      if (_submitting) { toast('正在提交，請稍候…'); return; }
       const initial = document.getElementById('userInitial').value.trim().toUpperCase();
       if (!initial) { toast('請輸入 Initial'); return; }
       if (!selectedMeal) { toast('請選擇飯餐'); return; }
+      _submitting = true;
+      const submitBtn = document.getElementById('submitBtn');
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = '提交中…'; }
+      try {
 
       const drink = document.getElementById('drinkSelect').value;
       const ice = document.getElementById('iceLevel').value;
@@ -1095,6 +1101,11 @@
       document.getElementById('orderNote').value = '';
       applyDrinkPrefForInitial();
       calcPrice();
+      } finally {
+        _submitting = false;
+        const btn = document.getElementById('submitBtn');
+        if (btn) { btn.disabled = false; btn.textContent = '✅ 確認落單'; }
+      }
     }
 
     // ===================== 訂單列表 =====================
@@ -1718,36 +1729,6 @@
       }
     }
 
-    function postViaIframe(payload) {
-      return new Promise((resolve) => {
-        const iframeName = 'gas_iframe_' + Date.now();
-        let iframe = document.getElementById('gasIframe');
-        if (!iframe) {
-          iframe = document.createElement('iframe');
-          iframe.id = 'gasIframe';
-          iframe.style.cssText = 'width:0;height:0;border:0;position:absolute;left:-9999px';
-          document.body.appendChild(iframe);
-        }
-        iframe.name = iframeName;
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = apiUrl;
-        form.target = iframeName;
-        form.style.display = 'none';
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'payload';
-        input.value = JSON.stringify(payload);
-        form.appendChild(input);
-        document.body.appendChild(form);
-        try { form.submit(); } catch (e) { console.warn(e); }
-        setTimeout(() => {
-          try { document.body.removeChild(form); } catch (e) {}
-          resolve({ ok: true });
-        }, 600);
-      });
-    }
-
     /** 單次 JSONP（唔經佇列） */
     function jsonpOnce(action, payload, timeoutMs) {
       return new Promise((resolve, reject) => {
@@ -1801,17 +1782,21 @@
       const writeActions = ['addOrder', 'markPaid', 'markAllPaid', 'deleteOrder', 'setSetting', 'importMenus'];
 
       if (writeActions.includes(action)) {
+        // 只用一次 fetch 寫入（唔好再 form/iframe，否則會開新分頁 + 訂單 DOUBLE）
         const body = { action, ...payload };
-        try { await postViaIframe(body); } catch (e) { console.warn(e); }
         try {
           await fetch(apiUrl, {
             method: 'POST',
             mode: 'no-cors',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify(body),
-            cache: 'no-store'
+            cache: 'no-store',
+            redirect: 'follow'
           });
-        } catch (e) { console.warn('fetch write', e); }
+        } catch (e) {
+          console.warn('fetch write', e);
+          throw new Error('寫入失敗：' + e.message);
+        }
         return { ok: true };
       }
 
