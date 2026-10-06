@@ -222,11 +222,11 @@
         <label>飲品</label>
         <select id="drinkSelect">
           <option value="">— 唔要飲品 —</option>
-          <option value="凍檸茶">凍檸茶 $15</option>
-          <option value="凍奶茶">凍奶茶 $15</option>
-          <option value="凍咖啡">凍咖啡 $16</option>
-          <option value="凍鴛鴦">凍鴛鴦 $16</option>
-          <option value="凍柠檬可乐">凍柠檬可樂 $14</option>
+          <option value="凍檸茶">凍檸茶 $17（15+2）</option>
+          <option value="凍奶茶">凍奶茶 $17（15+2）</option>
+          <option value="凍咖啡">凍咖啡 $18（16+2）</option>
+          <option value="凍鴛鴦">凍鴛鴦 $18（16+2）</option>
+          <option value="凍柠檬可乐">凍柠檬可樂 $16（14+2）</option>
           <option value="熱奶茶">熱奶茶 $13</option>
           <option value="熱咖啡">熱咖啡 $14</option>
           <option value="熱鴛鴦">熱鴛鴦 $14</option>
@@ -264,9 +264,14 @@
         <h2>5. 確認價錢</h2>
         <div id="priceSummary">
           <div class="summary-row"><span>飯餐</span><span id="sumMeal">$0</span></div>
+          <div class="summary-row"><span>外賣費</span><span id="sumTakeaway">+$1</span></div>
           <div class="summary-row"><span>飲品</span><span id="sumDrink">$0</span></div>
+          <div class="summary-row" id="bulkHintRow" style="display:none;color:var(--success)"><span>滿5份優惠（每飯 −$2）</span><span id="sumBulk">−$0</span></div>
           <div class="summary-row total"><span>合計</span><span id="sumTotal">$0</span></div>
         </div>
+        <p style="font-size:.8rem;color:var(--muted);margin-top:8px">
+          凍飲 +$2　·　每單外賣 +$1　·　當日滿 5 份，每份飯再減 $2（結算時自動計）
+        </p>
         <label style="margin-top:12px">備註（可選）</label>
         <input type="text" id="orderNote" placeholder="例如 少油 / 多飯" />
         <button class="btn btn-primary btn-block" style="margin-top:14px" id="submitBtn" onclick="submitOrder()">
@@ -535,10 +540,15 @@
       {code:"SET7", name:"常餐（榨菜肉絲米 + 雞扒/豬扒/魚柳/雞亦 +$3轉生炸雞脾）", price:48}
     ];
 
+    // 基本價（凍飲會再 +2）
     const DRINK_PRICES = {
       "凍檸茶":15,"凍奶茶":15,"凍咖啡":16,"凍鴛鴦":16,"凍柠檬可乐":14,
       "熱奶茶":13,"熱咖啡":14,"熱鴛鴦":14,"熱水":5,"其他":15
     };
+    const TAKEAWAY_FEE = 1;   // 每單外賣 +$1
+    const COLD_EXTRA = 2;     // 凍飲額外 +$2
+    const BULK_DISCOUNT = 2;  // 當日滿5份，每飯 −$2
+    const BULK_THRESHOLD = 5;
 
     // ===================== 狀態 =====================
     let apiUrl = localStorage.getItem('lunch_api_url') || '';
@@ -554,6 +564,15 @@
       document.getElementById('apiUrlInput').value = apiUrl;
       document.getElementById('pickupPerson').textContent = pickupPerson || '未設定';
       document.getElementById('adminPickup').value = pickupPerson;
+
+      // 還原已匯入的菜單
+      try {
+        const saved = localStorage.getItem('lunch_menus');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          Object.keys(parsed).forEach(d => { DEFAULT_MENUS[d] = parsed[d]; });
+        }
+      } catch (e) {}
 
       populateDateSelects();
       populateInitials();
@@ -692,13 +711,26 @@
       calcPrice();
     }
 
+    function getDrinkPrice(drink) {
+      if (!drink) return 0;
+      let p = DRINK_PRICES[drink] || 15;
+      if (drink.startsWith('凍')) p += COLD_EXTRA; // 凍飲 +$2
+      return p;
+    }
+
     function calcPrice() {
       const mealP = selectedMeal ? selectedMeal.price : 0;
       const drink = document.getElementById('drinkSelect').value;
-      const drinkP = drink ? (DRINK_PRICES[drink] || 15) : 0;
+      const drinkP = getDrinkPrice(drink);
+      const takeaway = mealP > 0 ? TAKEAWAY_FEE : 0;
+      // 落單時顯示未計 bulk（因為當日總數未知），只提示
+      const total = mealP + takeaway + drinkP;
       document.getElementById('sumMeal').textContent = '$' + mealP;
-      document.getElementById('sumDrink').textContent = '$' + drinkP;
-      document.getElementById('sumTotal').textContent = '$' + (mealP + drinkP);
+      document.getElementById('sumTakeaway').textContent = takeaway ? '+$' + takeaway : '$0';
+      document.getElementById('sumDrink').textContent = drinkP ? ('$' + drinkP + (drink && drink.startsWith('凍') ? '（含凍飲+$2）' : '')) : '$0';
+      document.getElementById('sumTotal').textContent = '$' + total;
+      // bulk 提示只在結算/匯出時套用
+      document.getElementById('bulkHintRow').style.display = 'none';
     }
 
     // ===================== 落單 =====================
@@ -715,8 +747,10 @@
       const date = document.getElementById('orderDate').value;
       const name = document.getElementById('userName').value.trim();
       const mealP = selectedMeal.price;
-      const drinkP = drink ? (DRINK_PRICES[drink] || 15) : 0;
-      const total = mealP + drinkP;
+      const drinkP = getDrinkPrice(drink);
+      const takeaway = TAKEAWAY_FEE;
+      // 個人 total 先唔計 bulk（結算時按當日總份數再減）
+      const total = mealP + takeaway + drinkP;
 
       let drinkStr = '';
       if (drink) {
@@ -734,6 +768,7 @@
         mealCode: selectedMeal.code,
         mealName: selectedMeal.name,
         mealPrice: mealP,
+        takeawayFee: takeaway,
         drink: drinkStr,
         drinkPrice: drinkP,
         total,
@@ -780,7 +815,10 @@
       let orders = [];
       if (apiUrl) {
         try {
-          orders = await callApi('getOrders', { date });
+          orders = await callApi('getOrders', { date }) || [];
+          // 把 Sheet 資料同步回本地（同日），方便匯出
+          localOrders = localOrders.filter(o => o.date !== date).concat(orders);
+          localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
         } catch (e) {
           orders = localOrders.filter(o => o.date === date);
           toast('無法連線，顯示本地資料');
@@ -796,20 +834,28 @@
         return;
       }
 
-      const totalAmt = orders.reduce((s,o) => s + o.total, 0);
+      const dayCount = orders.length;
+      const hasBulk = dayCount >= BULK_THRESHOLD;
+      const totalAmt = orders.reduce((s,o) => s + (Number(o.total) || 0), 0);
+      const effectiveAmt = orders.reduce((s,o) => s + getEffectiveTotal(o, dayCount), 0);
       const unpaid = orders.filter(o => !o.paid).length;
       document.getElementById('orderStats').innerHTML = `
-        <div class="status-item">共 ${orders.length} 份</div>
-        <div class="status-item">合計 $${totalAmt}</div>
+        <div class="status-item">共 ${dayCount} 份</div>
+        <div class="status-item">${hasBulk ? '應付 $' + effectiveAmt + '（已減滿5份優惠）' : '合計 $' + totalAmt}</div>
         <div class="status-item">${unpaid ? unpaid + ' 人未付' : '全部已付 ✅'}</div>
       `;
 
-      tbody.innerHTML = orders.map(o => `
+      tbody.innerHTML = orders.map(o => {
+        const eff = getEffectiveTotal(o, dayCount);
+        const priceLabel = hasBulk && eff !== Number(o.total)
+          ? `$${eff}<br><small style="color:#999;text-decoration:line-through">$${o.total}</small>`
+          : `$${o.total}`;
+        return `
         <tr>
           <td><strong>${o.initial}</strong>${o.name ? '<br><small>'+o.name+'</small>' : ''}</td>
           <td>${o.mealCode}. ${o.mealName}</td>
           <td>${o.drink || '—'}</td>
-          <td>$${o.total}</td>
+          <td>${priceLabel}</td>
           <td>
             <span class="badge ${o.paid ? 'badge-paid' : 'badge-unpaid'}">${o.paid ? '已付' : '未付'}</span>
           </td>
@@ -818,7 +864,8 @@
             <button class="btn btn-danger" style="padding:4px 10px;font-size:.8rem" onclick="deleteOrder('${o.id}')">刪</button>
           </td>
         </tr>
-      `).join('');
+      `;
+      }).join('');
     }
 
     async function markPaid(id) {
@@ -888,10 +935,17 @@
     }
 
     // ===================== 匯出 WhatsApp =====================
+    function getEffectiveTotal(order, dayCount) {
+      // dayCount = 當日總份數；滿5份則每飯減 $2
+      let t = (order.mealPrice || 0) + (order.takeawayFee != null ? order.takeawayFee : TAKEAWAY_FEE) + (order.drinkPrice || 0);
+      if (dayCount >= BULK_THRESHOLD) t -= BULK_DISCOUNT;
+      return Math.max(0, t);
+    }
+
     function generateExport() {
       const date = document.getElementById('exportDate').value;
-      const orders = localOrders.filter(o => o.date === date);
-      // 如果有 API 也可以拉，但為了即時，先用本地 + 提示
+      let orders = localOrders.filter(o => o.date === date);
+      // 若有 API，嘗試拉最新（失敗就用本地）
       const d = new Date(date + 'T12:00:00');
       let text = `【六記訂飯】${formatDateLabel(d)}\n`;
       text += `電話：24362000 / WhatsApp 55018351\n`;
@@ -900,6 +954,9 @@
       if (!orders.length) {
         text += '（暫無訂單）\n';
       } else {
+        const dayCount = orders.length;
+        const hasBulk = dayCount >= BULK_THRESHOLD;
+
         // 按 meal 汇总数量
         const mealCount = {};
         orders.forEach(o => {
@@ -914,10 +971,20 @@
         const drinks = orders.filter(o => o.drink).map(o => o.drink);
         if (drinks.length) {
           text += `\n飲品：\n`;
-          drinks.forEach(d => text += `• ${d}\n`);
+          drinks.forEach(dr => text += `• ${dr}\n`);
         }
 
-        text += `\n共 ${orders.length} 份\n`;
+        // 價錢摘要
+        const rawSum = orders.reduce((s,o) => s + (o.total || 0), 0);
+        const effectiveSum = orders.reduce((s,o) => s + getEffectiveTotal(o, dayCount), 0);
+        text += `\n共 ${dayCount} 份`;
+        if (hasBulk) {
+          text += `（已達滿${BULK_THRESHOLD}份，每飯 −$${BULK_DISCOUNT}）\n`;
+          text += `應付合計：$${effectiveSum}（原價 $${rawSum}）\n`;
+        } else {
+          text += `\n合計：$${rawSum}\n`;
+          text += `（未滿${BULK_THRESHOLD}份，未享每飯減$${BULK_DISCOUNT}）\n`;
+        }
       }
 
       text += `────────────────\n`;
@@ -963,24 +1030,33 @@
       const raw = document.getElementById('importJson').value.trim();
       if (!raw) { toast('請貼上 JSON'); return; }
       try {
-        const data = JSON.parse(raw);
-        if (!Array.isArray(data)) throw new Error('必須是陣列');
+        // 容許 AI 偶爾包了 ```json ... ```
+        let cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+        const data = JSON.parse(cleaned);
+        if (!Array.isArray(data)) throw new Error('必須是陣列 [ {...}, ... ]');
+        let count = 0;
         data.forEach(item => {
-          if (!item.date || !item.code || !item.name || item.price == null) throw new Error('缺少欄位');
+          if (!item.date || !item.code || !item.name || item.price == null) {
+            throw new Error('每項需要 date, code, name, price。問題項：' + JSON.stringify(item).slice(0,80));
+          }
           if (!DEFAULT_MENUS[item.date]) DEFAULT_MENUS[item.date] = [];
-          // 替换或新增
           const idx = DEFAULT_MENUS[item.date].findIndex(m => m.code === item.code);
-          if (idx >= 0) DEFAULT_MENUS[item.date][idx] = item;
-          else DEFAULT_MENUS[item.date].push(item);
+          const entry = { code: item.code, name: item.name, price: Number(item.price) };
+          if (idx >= 0) DEFAULT_MENUS[item.date][idx] = entry;
+          else DEFAULT_MENUS[item.date].push(entry);
+          count++;
         });
-        // 保存到 local
         localStorage.setItem('lunch_menus', JSON.stringify(DEFAULT_MENUS));
         populateDateSelects();
         renderMeals();
-        toast(`成功匯入 ${data.length} 項菜單`);
-        if (apiUrl) callApi('importMenus', data).catch(e => toast('Sheets 同步失敗：'+e.message));
+        toast(`✅ 成功匯入 ${count} 項菜單`);
+        // 菜單主要存在本地；Sheets 同步可選
+        if (apiUrl) {
+          callApi('importMenus', { count }).catch(() => {});
+        }
       } catch (e) {
-        toast('JSON 格式錯誤：' + e.message);
+        toast('匯入失敗：' + e.message);
+        console.error(e);
       }
     }
 
@@ -1022,17 +1098,67 @@
       });
     }
 
-    // ===================== API 呼叫 =====================
+    // ===================== API 呼叫（解決 CORS）=====================
+    // Google Apps Script 跨域會被 CORS 擋住。
+    // 寫入用 no-cors POST（不讀 response，樂觀更新本地）
+    // 讀取用 JSONP（doGet + callback）
     async function callApi(action, payload = {}) {
       if (!apiUrl) throw new Error('未設定 API 網址');
-      const res = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' }, // Apps Script 需要
-        body: JSON.stringify({ action, ...payload })
+
+      const writeActions = ['addOrder', 'markPaid', 'deleteOrder', 'setSetting', 'importMenus'];
+
+      if (writeActions.includes(action)) {
+        // 寫入：no-cors，無法讀回傳，但資料會寫入 Sheet
+        try {
+          await fetch(apiUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ action, ...payload })
+          });
+          return { ok: true };
+        } catch (e) {
+          throw new Error('寫入失敗：' + e.message);
+        }
+      }
+
+      // 讀取：JSONP
+      return new Promise((resolve, reject) => {
+        const cbName = '_lunchCb_' + Date.now() + '_' + Math.floor(Math.random() * 9999);
+        const timeout = setTimeout(() => {
+          cleanup();
+          reject(new Error('讀取逾時，請確認 Apps Script 已更新支援 doGet'));
+        }, 12000);
+
+        function cleanup() {
+          clearTimeout(timeout);
+          delete window[cbName];
+          if (script && script.parentNode) script.parentNode.removeChild(script);
+        }
+
+        window[cbName] = function (data) {
+          cleanup();
+          if (data && data.error) reject(new Error(data.error));
+          else resolve(data && data.result !== undefined ? data.result : data);
+        };
+
+        const script = document.createElement('script');
+        const params = new URLSearchParams();
+        params.set('action', action);
+        params.set('callback', cbName);
+        // 把其餘參數也帶上（例如 date）
+        Object.keys(payload || {}).forEach(k => {
+          if (payload[k] !== undefined && payload[k] !== null) {
+            params.set(k, typeof payload[k] === 'object' ? JSON.stringify(payload[k]) : String(payload[k]));
+          }
+        });
+        script.src = apiUrl + (apiUrl.includes('?') ? '&' : '?') + params.toString();
+        script.onerror = () => {
+          cleanup();
+          reject(new Error('JSONP 載入失敗'));
+        };
+        document.body.appendChild(script);
       });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      return data.result;
     }
 
     function saveApiUrl() {
@@ -1073,142 +1199,161 @@
 
     // ===================== Apps Script 說明 =====================
     const SETUP_TEXT = `
-【完整設定步驟】
+【重要】請用下方最新 Apps Script 重新部署（必須支援 doGet JSONP，否則會 CORS 失敗）
 
 1. 建立 Google Sheet
-   - 開啟 https://sheets.google.com 新建試算表
-   - 命名為「六記訂飯」
-   - 建立以下工作表（分頁）：
+   - 開啟 https://sheets.google.com 新建試算表，命名「六記訂飯」
+   - 建立工作表：
 
-   【Orders】工作表（第一列標題）：
-   id | timestamp | initial | name | date | mealCode | mealName | mealPrice | drink | drinkPrice | total | paid | note
+   【Orders】第一列標題（請完整複製）：
+   id | timestamp | initial | name | date | mealCode | mealName | mealPrice | takeawayFee | drink | drinkPrice | total | paid | note
 
-   【Settings】工作表：
+   【Settings】第一列：
    key | value
-   pickup | （空）
 
-2. 開啟 Apps Script
-   - 在 Sheet 選單：擴充功能 → Apps Script
-   - 刪除預設內容，貼上以下程式碼：
+2. Apps Script（擴充功能 → Apps Script）刪除舊碼，貼上下方全部：
 
 ─── 複製開始 ───
 function doPost(e) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const data = JSON.parse(e.postData.contents);
-  const action = data.action;
-  let result = null;
-
   try {
-    if (action === 'addOrder') {
-      const sheet = ss.getSheetByName('Orders');
-      sheet.appendRow([
-        data.id, data.timestamp, data.initial, data.name || '',
-        data.date, data.mealCode, data.mealName, data.mealPrice,
-        data.drink || '', data.drinkPrice || 0, data.total,
-        data.paid ? 'TRUE' : 'FALSE', data.note || ''
-      ]);
-      result = { ok: true };
-    }
-    else if (action === 'getOrders') {
-      const sheet = ss.getSheetByName('Orders');
-      const rows = sheet.getDataRange().getValues();
-      const headers = rows[0];
-      result = rows.slice(1)
-        .map(r => {
-          const o = {};
-          headers.forEach((h,i) => o[h] = r[i]);
-          o.paid = o.paid === true || o.paid === 'TRUE';
-          return o;
-        })
-        .filter(o => !data.date || o.date === data.date);
-    }
-    else if (action === 'getAllUnpaid') {
-      const sheet = ss.getSheetByName('Orders');
-      const rows = sheet.getDataRange().getValues();
-      const headers = rows[0];
-      result = rows.slice(1)
-        .map(r => {
-          const o = {};
-          headers.forEach((h,i) => o[h] = r[i]);
-          o.paid = o.paid === true || o.paid === 'TRUE';
-          return o;
-        })
-        .filter(o => !o.paid);
-    }
-    else if (action === 'markPaid') {
-      const sheet = ss.getSheetByName('Orders');
-      const rows = sheet.getDataRange().getValues();
-      for (let i = 1; i < rows.length; i++) {
-        if (rows[i][0] === data.id) {
-          sheet.getRange(i+1, 12).setValue('TRUE');
-          break;
-        }
-      }
-      result = { ok: true };
-    }
-    else if (action === 'deleteOrder') {
-      const sheet = ss.getSheetByName('Orders');
-      const rows = sheet.getDataRange().getValues();
-      for (let i = 1; i < rows.length; i++) {
-        if (rows[i][0] === data.id) {
-          sheet.deleteRow(i+1);
-          break;
-        }
-      }
-      result = { ok: true };
-    }
-    else if (action === 'setSetting') {
-      const sheet = ss.getSheetByName('Settings');
-      const rows = sheet.getDataRange().getValues();
-      let found = false;
-      for (let i = 1; i < rows.length; i++) {
-        if (rows[i][0] === data.key) {
-          sheet.getRange(i+1, 2).setValue(data.value);
-          found = true;
-          break;
-        }
-      }
-      if (!found) sheet.appendRow([data.key, data.value]);
-      result = { ok: true };
-    }
-    else if (action === 'importMenus') {
-      // 可選：另外建 Menus 工作表儲存
-      result = { ok: true, count: data.length || 0 };
-    }
-    else {
-      result = { error: 'Unknown action' };
-    }
+    var data = JSON.parse(e.postData.contents);
+    var result = handleAction(data.action, data);
+    return ContentService.createTextOutput(JSON.stringify({ result: result }))
+      .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ error: err.message }))
       .setMimeType(ContentService.MimeType.JSON);
   }
-
-  return ContentService.createTextOutput(JSON.stringify({ result }))
-    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function doGet(e) {
-  return ContentService.createTextOutput(JSON.stringify({ status: 'ok', msg: '六記訂飯 API' }))
+  var p = e.parameter || {};
+  var action = p.action || '';
+  var callback = p.callback || '';
+  var result, out;
+  try {
+    if (!action) {
+      out = JSON.stringify({ status: 'ok', msg: '六記訂飯 API v2' });
+    } else {
+      result = handleAction(action, p);
+      out = JSON.stringify({ result: result });
+    }
+  } catch (err) {
+    out = JSON.stringify({ error: err.message });
+  }
+  if (callback) {
+    return ContentService.createTextOutput(callback + '(' + out + ')')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService.createTextOutput(out)
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleAction(action, data) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var result = null;
+
+  if (action === 'addOrder') {
+    var sheet = ss.getSheetByName('Orders');
+    sheet.appendRow([
+      data.id, data.timestamp, data.initial, data.name || '',
+      data.date, data.mealCode, data.mealName, data.mealPrice || 0,
+      data.takeawayFee != null ? data.takeawayFee : 1,
+      data.drink || '', data.drinkPrice || 0, data.total,
+      data.paid ? 'TRUE' : 'FALSE', data.note || ''
+    ]);
+    result = { ok: true };
+  }
+  else if (action === 'getOrders') {
+    var sheet = ss.getSheetByName('Orders');
+    var rows = sheet.getDataRange().getValues();
+    if (rows.length < 2) return [];
+    var headers = rows[0];
+    result = rows.slice(1).map(function(r) {
+      var o = {};
+      headers.forEach(function(h, i) { o[h] = r[i]; });
+      o.paid = o.paid === true || o.paid === 'TRUE';
+      return o;
+    }).filter(function(o) {
+      return !data.date || String(o.date) === String(data.date);
+    });
+  }
+  else if (action === 'getAllUnpaid') {
+    var sheet = ss.getSheetByName('Orders');
+    var rows = sheet.getDataRange().getValues();
+    if (rows.length < 2) return [];
+    var headers = rows[0];
+    result = rows.slice(1).map(function(r) {
+      var o = {};
+      headers.forEach(function(h, i) { o[h] = r[i]; });
+      o.paid = o.paid === true || o.paid === 'TRUE';
+      return o;
+    }).filter(function(o) { return !o.paid; });
+  }
+  else if (action === 'markPaid') {
+    var sheet = ss.getSheetByName('Orders');
+    var rows = sheet.getDataRange().getValues();
+    for (var i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]) === String(data.id)) {
+        // paid 欄位：找 header
+        var headers = rows[0];
+        var paidCol = headers.indexOf('paid') + 1;
+        if (paidCol > 0) sheet.getRange(i + 1, paidCol).setValue('TRUE');
+        break;
+      }
+    }
+    result = { ok: true };
+  }
+  else if (action === 'deleteOrder') {
+    var sheet = ss.getSheetByName('Orders');
+    var rows = sheet.getDataRange().getValues();
+    for (var i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]) === String(data.id)) {
+        sheet.deleteRow(i + 1);
+        break;
+      }
+    }
+    result = { ok: true };
+  }
+  else if (action === 'setSetting') {
+    var sheet = ss.getSheetByName('Settings');
+    var rows = sheet.getDataRange().getValues();
+    var found = false;
+    for (var i = 1; i < rows.length; i++) {
+      if (rows[i][0] === data.key) {
+        sheet.getRange(i + 1, 2).setValue(data.value);
+        found = true;
+        break;
+      }
+    }
+    if (!found) sheet.appendRow([data.key, data.value]);
+    result = { ok: true };
+  }
+  else if (action === 'importMenus') {
+    result = { ok: true };
+  }
+  else {
+    throw new Error('Unknown action: ' + action);
+  }
+  return result;
 }
 ─── 複製結束 ───
 
-3. 部署
-   - 按右上角「部署」→「新增部署作業」
-   - 類型選「網頁應用程式」
-   - 說明：lunch-order-v1
+3. 部署（必須重新部署才生效）
+   - 右上角「部署」→「管理部署作業」→ 編輯（鉛筆）或「新增部署作業」
+   - 類型：網頁應用程式
    - 執行身分：我
    - 具有存取權的使用者：任何人
-   - 按「部署」
-   - 授權（第一次會要求權限）
-   - 複製「網頁應用程式網址」
-   - 貼回本頁的 API 網址欄位
+   - 部署後複製新網址，貼回本頁 API 欄位
 
-4. 完成！之後所有同事用同一個 GitHub Pages 網址即可同時落單。
+4. 完成
 
-注意：
-- 本地模式（不設 API）也能用，資料存在瀏覽器 localStorage，適合測試。
-- 正式多人使用務必設定 Google Sheet，否則各人資料互不相通。
+價錢規則（系統已內建）：
+- 凍飲 +$2
+- 每單外賣 +$1
+- 當日滿 5 份，每份飯再減 $2（匯出 WhatsApp 時自動計算）
+
+注意：本地模式不設 API 也能用；正式多人請一定更新 Apps Script。
 `;
   </script>
 </body>
