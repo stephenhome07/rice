@@ -222,16 +222,16 @@
         <label>飲品</label>
         <select id="drinkSelect">
           <option value="">— 唔要飲品 —</option>
-          <option value="凍檸茶">凍檸茶 $17（15+2）</option>
-          <option value="凍奶茶">凍奶茶 $17（15+2）</option>
-          <option value="凍咖啡">凍咖啡 $18（16+2）</option>
-          <option value="凍鴛鴦">凍鴛鴦 $18（16+2）</option>
-          <option value="凍柠檬可乐">凍柠檬可樂 $16（14+2）</option>
-          <option value="熱奶茶">熱奶茶 $13</option>
-          <option value="熱咖啡">熱咖啡 $14</option>
-          <option value="熱鴛鴦">熱鴛鴦 $14</option>
-          <option value="熱水">熱水 $5</option>
-          <option value="其他">其他（備註寫明）</option>
+          <option value="凍檸茶">凍檸茶（+$2）</option>
+          <option value="凍奶茶">凍奶茶（+$2）</option>
+          <option value="凍咖啡">凍咖啡（+$2）</option>
+          <option value="凍鴛鴦">凍鴛鴦（+$2）</option>
+          <option value="凍柠檬可乐">凍柠檬可樂（+$2）</option>
+          <option value="熱奶茶">熱奶茶（免費）</option>
+          <option value="熱咖啡">熱咖啡（免費）</option>
+          <option value="熱鴛鴦">熱鴛鴦（免費）</option>
+          <option value="熱水">熱水（免費）</option>
+          <option value="其他">其他（免費，備註寫明）</option>
         </select>
         <div class="drink-opts" id="drinkOpts" style="display:none">
           <div>
@@ -270,7 +270,7 @@
           <div class="summary-row total"><span>合計</span><span id="sumTotal">$0</span></div>
         </div>
         <p style="font-size:.8rem;color:var(--muted);margin-top:8px">
-          凍飲 +$2　·　每單外賣 +$1　·　當日滿 5 份，每份飯再減 $2（結算時自動計）
+          飲品免費　·　凍飲另加 $2　·　每單外賣 +$1　·　當日滿 5 份每飯 −$2（結算時自動計）
         </p>
         <label style="margin-top:12px">備註（可選）</label>
         <input type="text" id="orderNote" placeholder="例如 少油 / 多飯" />
@@ -375,176 +375,14 @@
   <div class="toast" id="toast"></div>
 
   <script>
-    // ===================== 預設菜單資料（2025年10月） =====================
-    const DEFAULT_MENUS = {
-      "2025-10-02": [
-        {code:"A",name:"清湯牛腩飯",price:52},{code:"B",name:"沙茶香茅豬扒飯",price:50},
-        {code:"C",name:"蝦醬豆卜豬頸肉",price:50},{code:"D",name:"菜脯蒸肉餅",price:48},
-        {code:"E",name:"日式咖喱吉列豬扒飯",price:50},{code:"F",name:"干炒雞絲公仔麵",price:50},
-        {code:"G",name:"茄汁炸脾紅腸飯",price:50}
-      ],
-      "2025-10-03": [
-        {code:"A",name:"勁蒜黑椒薯仔牛肉飯",price:50},{code:"B",name:"粟米班腩飯",price:50},
-        {code:"C",name:"麵醬豆卜蒸排骨",price:48},{code:"D",name:"梅香咸魚蒸肉餅",price:50},
-        {code:"E",name:"美極生炒牛肉飯",price:50},{code:"F",name:"味菜牛柳絲炒意",price:50},
-        {code:"G",name:"洋蔥汁豬扒腸飯",price:50}
-      ],
-      "2025-10-05": [
-        {code:"A",name:"咖喱牛腩飯",price:55},{code:"B",name:"麻婆豆腐飯",price:50},
-        {code:"C",name:"豉汁蒸倉魚飯",price:55},{code:"D",name:"土魷蒸肉餅",price:48},
-        {code:"E",name:"(兜亂)福建炒飯",price:50},{code:"F",name:"燒汁豬扒炒烏冬",price:50},
-        {code:"G",name:"黑椒豬扒火腿飯",price:48}
-      ],
-      "2025-10-06": [
-        {code:"A",name:"俄羅斯黑椒燉雞飯",price:50},{code:"B",name:"魚香茄子飯",price:50},
-        {code:"C",name:"豉汁鳳爪排骨",price:48},{code:"D",name:"咸蛋蒸肉餅",price:48},
-        {code:"E",name:"生炒雞絲飯",price:50},{code:"F",name:"干炒牛河",price:50},
-        {code:"G",name:"蒜蓉汁雞扒腸飯",price:50}
-      ],
-      "2025-10-07": [
-        {code:"A",name:"豆腐火腩飯",price:55},{code:"B",name:"千島咕嚕雞球飯",price:50},
-        {code:"C",name:"花菇魚肚蒸雞",price:48},{code:"D",name:"梅菜蒸肉餅",price:48},
-        {code:"E",name:"西炒飯",price:50},{code:"F",name:"金菇肉絲炆伊麵",price:50},
-        {code:"G",name:"茄汁雞扒餐肉飯",price:48}
-      ],
-      "2025-10-08": [
-        {code:"A",name:"醬燒牛腩飯",price:52},{code:"B",name:"日式咖喱雞球飯",price:50},
-        {code:"C",name:"紫菜肉碎魚皮餃湯飯",price:50},{code:"D",name:"馬蹄蒸肉餅",price:48},
-        {code:"E",name:"咖喱菠蘿海鮮炒飯",price:50},{code:"F",name:"干炒豬扒烏冬",price:50},
-        {code:"G",name:"白汁粟米豬扒火腿飯",price:50}
-      ],
-      "2025-10-09": [
-        {code:"A",name:"豉蒜涼瓜炆排骨飯",price:50},{code:"B",name:"葡汁雞皇飯",price:50},
-        {code:"C",name:"蒜蓉豆卜蒸排骨",price:48},{code:"D",name:"菜脯蒸肉餅",price:48},
-        {code:"E",name:"芝士黑椒牛肉炒飯",price:50},{code:"F",name:"干炒黑椒雞絲意",price:50},
-        {code:"G",name:"蒜蓉汁雞扒火腿飯",price:50}
-      ],
-      "2025-10-10": [
-        {code:"A",name:"冬瓜火腩飯",price:55},{code:"B",name:"紅燒豆腐飯",price:50},
-        {code:"C",name:"芥菜咸排骨湯飯",price:52},{code:"D",name:"梅香咸魚蒸肉餅",price:50},
-        {code:"E",name:"咸魚雞粒炒飯",price:50},{code:"F",name:"雪菜肉絲炆米",price:50},
-        {code:"G",name:"豉油豬扒餐肉飯",price:48}
-      ],
-      "2025-10-12": [
-        {code:"A",name:"咖喱薯仔雞飯",price:52},{code:"B",name:"椒鹽豬扒飯",price:50},
-        {code:"C",name:"剁椒蒸排骨",price:48},{code:"D",name:"土魷蒸肉餅",price:48},
-        {code:"E",name:"馬拉盞海鮮炒飯",price:50},{code:"F",name:"豉椒牛肉炒河",price:50},
-        {code:"G",name:"燒汁雞扒餐肉飯",price:50}
-      ],
-      "2025-10-13": [
-        {code:"A",name:"日式麵豉炆腩肉飯",price:50},{code:"B",name:"香菇肉醬扒豆腐飯",price:50},
-        {code:"C",name:"胡椒豬肚雞湯飯",price:52},{code:"D",name:"咸蛋蒸肉餅",price:48},
-        {code:"E",name:"夠薑麻油雞粒炒飯",price:50},{code:"F",name:"茄子肉絲炆米",price:50},
-        {code:"G",name:"洋蔥汁豬扒火腿飯",price:50}
-      ],
-      "2025-10-14": [
-        {code:"A",name:"南乳蓮藕豬手飯",price:50},{code:"B",name:"滑蛋牛肉飯",price:50},
-        {code:"C",name:"豉蒜醬香蒸排骨",price:48},{code:"D",name:"梅菜蒸肉餅",price:48},
-        {code:"E",name:"菜粒蛋白蝦仁炒飯",price:50},{code:"F",name:"鮮茄豬扒燴意粉",price:50},
-        {code:"G",name:"蔥油炸脾火腿飯",price:50}
-      ],
-      "2025-10-15": [
-        {code:"A",name:"豆角腩片燒茄子飯",price:50},{code:"B",name:"粟米肉粒飯",price:50},
-        {code:"C",name:"蝦醬豆卜豬頸肉",price:50},{code:"D",name:"馬蹄蒸肉餅",price:48},
-        {code:"E",name:"香蔥勁多餐肉炒飯",price:50},{code:"F",name:"星州炒米",price:50},
-        {code:"G",name:"蔥油雞扒餐肉飯",price:50}
-      ],
-      "2025-10-16": [
-        {code:"A",name:"黑椒蘑菇薯仔牛腩飯",price:52},{code:"B",name:"粟米火腿雞絲飯",price:50},
-        {code:"C",name:"麵醬豆卜蒸排骨",price:48},{code:"D",name:"菜脯蒸肉餅",price:48},
-        {code:"E",name:"蒜香黑椒牛肉炒飯",price:50},{code:"F",name:"干炒豬扒意粉",price:50},
-        {code:"G",name:"蒜蓉汁豬扒紅腸飯",price:50}
-      ],
-      "2025-10-17": [
-        {code:"A",name:"(豬)芝士免治肉醬飯",price:50},{code:"B",name:"菜遠牛肉飯",price:50},
-        {code:"C",name:"豉汁蒸倉魚飯",price:55},{code:"D",name:"梅香咸魚蒸肉餅",price:50},
-        {code:"E",name:"蝦米臘腸炒飯",price:50},{code:"F",name:"香辣蒜香大蜆炒意粉",price:50},
-        {code:"G",name:"洋蔥汁雞扒腸仔飯",price:50}
-      ],
-      "2025-10-20": [
-        {code:"A",name:"南乳涼瓜炆腩肉飯",price:50},{code:"B",name:"黑椒蘑菇雞皇飯",price:50},
-        {code:"C",name:"豉汁鳳爪排骨",price:48},{code:"D",name:"土魷蒸肉餅",price:48},
-        {code:"E",name:"菜脯雞粒炒飯",price:50},{code:"F",name:"干炒煙鴨胸意粉",price:50},
-        {code:"G",name:"蒜蓉汁豬扒紅腸飯",price:50}
-      ],
-      "2025-10-21": [
-        {code:"A",name:"鎮江豬手蛋飯",price:50},{code:"B",name:"照燒茄子雞扒飯",price:50},
-        {code:"C",name:"花菇魚肚蒸雞",price:48},{code:"D",name:"咸蛋蒸肉餅",price:48},
-        {code:"E",name:"黑椒芝士牛肉炒飯",price:50},{code:"F",name:"香辣蕃茄海鮮炒意粉",price:50},
-        {code:"G",name:"白汁粟米雞扒腿飯",price:50}
-      ],
-      "2025-10-22": [
-        {code:"A",name:"咖喱牛腩飯",price:55},{code:"B",name:"豚肉生薑燒",price:50},
-        {code:"C",name:"紫菜肉碎魚皮餃湯飯",price:50},{code:"D",name:"梅菜蒸肉餅",price:48},
-        {code:"E",name:"楊州炒飯",price:50},{code:"F",name:"豉椒排骨炒河",price:50},
-        {code:"G",name:"黑椒蘑菇豬扒腸飯",price:50}
-      ],
-      "2025-10-23": [
-        {code:"A",name:"梅菜腩肉飯",price:50},{code:"B",name:"千島咕嚕雞球飯",price:50},
-        {code:"C",name:"蒜蓉豆卜蒸排骨",price:48},{code:"D",name:"馬蹄蒸肉餅",price:48},
-        {code:"E",name:"薑粒菜甫炒飯",price:50},{code:"F",name:"瑞士汁干炒牛河",price:50},
-        {code:"G",name:"茄汁豬扒紅腸飯",price:48}
-      ],
-      "2025-10-24": [
-        {code:"A",name:"咖喱什菜豬扒飯",price:50},{code:"B",name:"粟米班腩飯",price:50},
-        {code:"C",name:"芥菜咸排骨湯飯",price:52},{code:"D",name:"菜脯蒸肉餅",price:48},
-        {code:"E",name:"鮑魚雞粒炒飯",price:50},{code:"F",name:"黑椒牛柳絲炒意",price:50},
-        {code:"G",name:"黑椒蘑菇雞扒腸飯",price:50}
-      ],
-      "2025-10-26": [
-        {code:"A",name:"清湯牛腩飯",price:52},{code:"B",name:"京都豬扒飯",price:50},
-        {code:"C",name:"剁椒蒸排骨",price:48},{code:"D",name:"梅香咸魚蒸肉餅",price:50},
-        {code:"E",name:"香蔥臘腸炒飯",price:50},{code:"F",name:"薑汁滑蛋牛肉炒河",price:50},
-        {code:"G",name:"蒜蓉汁豬扒腸飯",price:50}
-      ],
-      "2025-10-27": [
-        {code:"A",name:"勁蒜黑椒甘筍腩肉飯",price:50},{code:"B",name:"魚香茄子飯",price:50},
-        {code:"C",name:"胡椒豬肚雞湯飯",price:52},{code:"D",name:"土魷蒸肉餅",price:48},
-        {code:"E",name:"馬拉盞香辣炒飯",price:50},{code:"F",name:"椰菜肉絲炒烏冬",price:50},
-        {code:"G",name:"茄汁豬扒火腿飯",price:48}
-      ],
-      "2025-10-28": [
-        {code:"A",name:"日式咖喱牛腩",price:52},{code:"B",name:"豆角腩片燒茄子飯",price:50},
-        {code:"C",name:"豉蒜醬香蒸排骨",price:48},{code:"D",name:"咸蛋蒸肉餅",price:48},
-        {code:"E",name:"欖菜肉鬆季豆炒飯",price:50},{code:"F",name:"芝士肉醬意粉/飯",price:50},
-        {code:"G",name:"黑椒炸脾餐肉飯",price:50}
-      ],
-      "2025-10-29": [
-        {code:"A",name:"南乳蓮藕炆腩肉",price:50},{code:"B",name:"椒鹽雞翼飯",price:50},
-        {code:"C",name:"蝦醬豆卜豬頸肉",price:50},{code:"D",name:"梅菜蒸肉餅",price:48},
-        {code:"E",name:"福建炒飯",price:50},{code:"F",name:"干炒肉片河",price:50},
-        {code:"G",name:"蒜蓉汁雞扒腸飯",price:50}
-      ],
-      "2025-10-30": [
-        {code:"A",name:"鎮江腩肉飯",price:50},{code:"B",name:"豉椒班腩飯",price:50},
-        {code:"C",name:"麵醬豆卜蒸排骨",price:48},{code:"D",name:"馬蹄蒸肉餅",price:48},
-        {code:"E",name:"鮮茄西炒飯",price:50},{code:"F",name:"香辣蒜香鴨胸炒意粉",price:50},
-        {code:"G",name:"薑蓉豬扒紅腸飯",price:50}
-      ],
-      "2025-10-31": [
-        {code:"A",name:"豆腐火腩飯",price:55},{code:"B",name:"鮮茄燴牛肉飯",price:50},
-        {code:"C",name:"豉汁鳳爪排骨",price:48},{code:"D",name:"菜脯蒸肉餅",price:48},
-        {code:"E",name:"櫻花蝦菜甫蛋炒飯",price:50},{code:"F",name:"銀芽肉絲炆伊麵",price:50},
-        {code:"G",name:"洋蔥汁豬扒火腿飯",price:50}
-      ]
-    };
+    // ===================== 菜單（由 Google Sheet 載入） =====================
+    // date -> [{code, name, price}, ...]
+    // 固定套餐用 date = "*" 表示每日供應
+    let MENUS = {};          // 按日菜單
+    let SET_MENUS = [];      // 固定套餐（每日）
+    let menusLoaded = false;
 
-    // 固定套餐（每日都有）
-    const SET_MENUS = [
-      {code:"SET1", name:"酸辣米線套餐（特級墨魚王/牛丸/雞扒/豬扒/雞亦 +$3轉生炸雞脾）", price:48},
-      {code:"SET2", name:"酸辣餃子米線套餐（鮮蝦雲吞/鳳城水餃/韭菜餃/椰菜餃 每款3只）", price:48},
-      {code:"SET3", name:"特級墨魚王湯河套餐（選一，雙拼+$8）", price:48},
-      {code:"SET4", name:"東北餃子米線套餐（選一，每款4只）", price:48},
-      {code:"SET5", name:"快餐（雞扒/豬扒/魚柳 + 火腿/腸/蛋/餐肉 + 跟飯/意粉）", price:48},
-      {code:"SET6", name:"午餐（雪菜肉絲麵 + 火腿奄列 + 牛油方包）", price:48},
-      {code:"SET7", name:"常餐（榨菜肉絲米 + 雞扒/豬扒/魚柳/雞亦 +$3轉生炸雞脾）", price:48}
-    ];
-
-    // 基本價（凍飲會再 +2）
-    const DRINK_PRICES = {
-      "凍檸茶":15,"凍奶茶":15,"凍咖啡":16,"凍鴛鴦":16,"凍柠檬可乐":14,
-      "熱奶茶":13,"熱咖啡":14,"熱鴛鴦":14,"熱水":5,"其他":15
-    };
+    // 飲品免費；只有凍飲 +$2
     const TAKEAWAY_FEE = 1;   // 每單外賣 +$1
     const COLD_EXTRA = 2;     // 凍飲額外 +$2
     const BULK_DISCOUNT = 2;  // 當日滿5份，每飯 −$2
@@ -565,26 +403,22 @@
       document.getElementById('pickupPerson').textContent = pickupPerson || '未設定';
       document.getElementById('adminPickup').value = pickupPerson;
 
-      // 還原已匯入的菜單
-      try {
-        const saved = localStorage.getItem('lunch_menus');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          Object.keys(parsed).forEach(d => { DEFAULT_MENUS[d] = parsed[d]; });
-        }
-      } catch (e) {}
-
-      populateDateSelects();
-      populateInitials();
-      renderMeals();
       setupTabs();
       setupDrinkToggle();
       setupMealChange();
-      loadOrders();
-      loadDebts();
-      generateExport();
+      populateInitials();
       buildSetupHelp();
       buildAiPrompt();
+
+      // 優先從 Google Sheet 載入菜單；失敗則試本機快取
+      (async () => {
+        await loadMenus();
+        populateDateSelects();
+        renderMeals();
+        loadOrders();
+        loadDebts();
+        generateExport();
+      })();
     });
 
     function formatDateLabel(d) {
@@ -597,27 +431,37 @@
     }
 
     function populateDateSelects() {
-      const dates = Object.keys(DEFAULT_MENUS).sort();
+      // 只顯示真正日子（排除 * / FIXED / 每天）
+      const dates = Object.keys(MENUS).filter(d => d && d !== '*' && d !== 'FIXED' && d !== '每天').sort();
       const selects = ['orderDate','filterDate','exportDate'];
       selects.forEach(id => {
         const sel = document.getElementById(id);
+        const prev = sel.value;
         sel.innerHTML = '';
+        if (!dates.length) {
+          const opt = document.createElement('option');
+          opt.value = '';
+          opt.textContent = '（未載入菜單，請設定 Google Sheet）';
+          sel.appendChild(opt);
+          return;
+        }
         dates.forEach(dk => {
           const d = new Date(dk + 'T12:00:00');
           const opt = document.createElement('option');
           opt.value = dk;
-          opt.textContent = formatDateLabel(d);
+          opt.textContent = isNaN(d.getTime()) ? dk : formatDateLabel(d);
           sel.appendChild(opt);
         });
-        // 預設今日或最接近的日子
         const today = toDateKey(new Date());
-        if (dates.includes(today)) sel.value = today;
+        if (dates.includes(prev)) sel.value = prev;
+        else if (dates.includes(today)) sel.value = today;
         else {
           const future = dates.find(d => d >= today);
-          sel.value = future || dates[dates.length-1];
+          sel.value = future || dates[dates.length - 1];
         }
       });
-      document.getElementById('orderDate').addEventListener('change', renderMeals);
+      const od = document.getElementById('orderDate');
+      od.onchange = renderMeals;
     }
 
     function populateInitials() {
@@ -661,38 +505,49 @@
     // ===================== 菜單渲染 =====================
     function renderMeals() {
       const date = document.getElementById('orderDate').value;
-      const meals = DEFAULT_MENUS[date] || [];
+      const meals = MENUS[date] || [];
       const container = document.getElementById('mealList');
-      if (!meals.length) {
-        container.innerHTML = '<p style="color:#999">此日無菜單資料</p>';
+      const setBox = document.getElementById('setOptions');
+
+      if (!date) {
+        container.innerHTML = '<p style="color:#999">請先在 Google Sheet 的 Menus 工作表輸入菜單，並確認 API 已設定。</p>';
+        setBox.innerHTML = '';
         return;
       }
-      container.innerHTML = meals.map(m => `
+      if (!meals.length && !SET_MENUS.length) {
+        container.innerHTML = '<p style="color:#999">此日無菜單資料（請檢查 Menus 工作表的 date 欄）</p>';
+        setBox.innerHTML = '';
+        return;
+      }
+
+      container.innerHTML = meals.length ? meals.map(m => `
         <label class="meal-item" data-code="${m.code}" data-name="${m.name}" data-price="${m.price}">
           <input type="radio" name="meal" value="${m.code}" />
           <span class="meal-code">${m.code}.</span>
           <span class="meal-name">${m.name}</span>
           <span class="meal-price">$${m.price}</span>
         </label>
-      `).join('');
+      `).join('') : '<p style="color:#999;font-size:.9rem">此日無 A–G 菜單</p>';
 
-      // 套餐
-      const setBox = document.getElementById('setOptions');
-      setBox.innerHTML = `
-        <div class="set-box">
-          <h3>固定套餐（每日供應）</h3>
-          <div class="meal-grid">
-            ${SET_MENUS.map(m => `
-              <label class="meal-item" data-code="${m.code}" data-name="${m.name}" data-price="${m.price}">
-                <input type="radio" name="meal" value="${m.code}" />
-                <span class="meal-code">套</span>
-                <span class="meal-name">${m.name}</span>
-                <span class="meal-price">$${m.price}</span>
-              </label>
-            `).join('')}
+      if (SET_MENUS.length) {
+        setBox.innerHTML = `
+          <div class="set-box">
+            <h3>固定套餐（每日供應）</h3>
+            <div class="meal-grid">
+              ${SET_MENUS.map(m => `
+                <label class="meal-item" data-code="${m.code}" data-name="${m.name}" data-price="${m.price}">
+                  <input type="radio" name="meal" value="${m.code}" />
+                  <span class="meal-code">套</span>
+                  <span class="meal-name">${m.name}</span>
+                  <span class="meal-price">$${m.price}</span>
+                </label>
+              `).join('')}
+            </div>
           </div>
-        </div>
-      `;
+        `;
+      } else {
+        setBox.innerHTML = '';
+      }
 
       document.querySelectorAll('.meal-item input').forEach(radio => {
         radio.addEventListener('change', (e) => {
@@ -702,7 +557,7 @@
           selectedMeal = {
             code: item.dataset.code,
             name: item.dataset.name,
-            price: parseInt(item.dataset.price)
+            price: parseInt(item.dataset.price, 10)
           };
           calcPrice();
         });
@@ -711,11 +566,78 @@
       calcPrice();
     }
 
+    /** 從 Google Sheet 載入菜單；失敗則用本機快取 */
+    async function loadMenus() {
+      MENUS = {};
+      SET_MENUS = [];
+      let rows = null;
+      if (apiUrl) {
+        try {
+          rows = await callApi('getMenus');
+        } catch (e) {
+          console.warn('getMenus failed', e);
+          toast('無法從 Sheet 載入菜單，試用本機快取');
+        }
+      }
+      if (!rows || !rows.length) {
+        try {
+          const saved = localStorage.getItem('lunch_menus_cache');
+          if (saved) rows = JSON.parse(saved);
+        } catch (e) {}
+      }
+      if (!rows || !rows.length) {
+        menusLoaded = false;
+        return;
+      }
+      applyMenuRows(rows);
+      localStorage.setItem('lunch_menus_cache', JSON.stringify(rows));
+      menusLoaded = true;
+    }
+
+    function applyMenuRows(rows) {
+      MENUS = {};
+      SET_MENUS = [];
+      rows.forEach(r => {
+        const date = String(r.date || '').trim();
+        const code = String(r.code || '').trim();
+        const name = String(r.name || '').trim();
+        const price = Number(r.price);
+        if (!code || !name || isNaN(price)) return;
+        const item = { code, name, price };
+        // 固定套餐：date 為 * / FIXED / 每天 / 空白
+        if (!date || date === '*' || date === 'FIXED' || date === '每天') {
+          SET_MENUS.push(item);
+        } else {
+          // 正規化日期：支援 2025/10/28 或 28/10/2025 等，統一 YYYY-MM-DD
+          const dk = normalizeDate(date);
+          if (!MENUS[dk]) MENUS[dk] = [];
+          MENUS[dk].push(item);
+        }
+      });
+    }
+
+    function normalizeDate(s) {
+      s = String(s).trim();
+      // 已是 YYYY-MM-DD
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      // YYYY/M/D
+      let m = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+      if (m) return m[1] + '-' + m[2].padStart(2,'0') + '-' + m[3].padStart(2,'0');
+      // D/M/YYYY or D/M/YY
+      m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+      if (m) {
+        let y = m[3];
+        if (y.length === 2) y = '20' + y;
+        return y + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0');
+      }
+      return s;
+    }
+
     function getDrinkPrice(drink) {
+      // 飲品免費；只有凍飲另加 $2
       if (!drink) return 0;
-      let p = DRINK_PRICES[drink] || 15;
-      if (drink.startsWith('凍')) p += COLD_EXTRA; // 凍飲 +$2
-      return p;
+      if (drink.startsWith('凍')) return COLD_EXTRA;
+      return 0;
     }
 
     function calcPrice() {
@@ -723,13 +645,13 @@
       const drink = document.getElementById('drinkSelect').value;
       const drinkP = getDrinkPrice(drink);
       const takeaway = mealP > 0 ? TAKEAWAY_FEE : 0;
-      // 落單時顯示未計 bulk（因為當日總數未知），只提示
       const total = mealP + takeaway + drinkP;
       document.getElementById('sumMeal').textContent = '$' + mealP;
       document.getElementById('sumTakeaway').textContent = takeaway ? '+$' + takeaway : '$0';
-      document.getElementById('sumDrink').textContent = drinkP ? ('$' + drinkP + (drink && drink.startsWith('凍') ? '（含凍飲+$2）' : '')) : '$0';
+      document.getElementById('sumDrink').textContent = drinkP
+        ? ('+$' + drinkP + '（凍飲）')
+        : (drink ? '免費' : '$0');
       document.getElementById('sumTotal').textContent = '$' + total;
-      // bulk 提示只在結算/匯出時套用
       document.getElementById('bulkHintRow').style.display = 'none';
     }
 
@@ -816,12 +738,12 @@
       if (apiUrl) {
         try {
           orders = await callApi('getOrders', { date }) || [];
-          // 把 Sheet 資料同步回本地（同日），方便匯出
-          localOrders = localOrders.filter(o => o.date !== date).concat(orders);
+          // Sheet 為準：用 Sheet 資料覆蓋本地同日快取（唔合併，避免重複）
+          localOrders = localOrders.filter(o => o.date !== date).concat(orders.map(normalizeOrder));
           localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
         } catch (e) {
           orders = localOrders.filter(o => o.date === date);
-          toast('無法連線，顯示本地資料');
+          toast('無法連線 Sheet，顯示本機快取');
         }
       } else {
         orders = localOrders.filter(o => o.date === date);
@@ -868,6 +790,25 @@
       }).join('');
     }
 
+    function normalizeOrder(o) {
+      return {
+        id: String(o.id || ''),
+        timestamp: o.timestamp,
+        initial: o.initial,
+        name: o.name || '',
+        date: String(o.date || ''),
+        mealCode: o.mealCode,
+        mealName: o.mealName,
+        mealPrice: Number(o.mealPrice) || 0,
+        takeawayFee: o.takeawayFee != null ? Number(o.takeawayFee) : TAKEAWAY_FEE,
+        drink: o.drink || '',
+        drinkPrice: Number(o.drinkPrice) || 0,
+        total: Number(o.total) || 0,
+        paid: o.paid === true || o.paid === 'TRUE' || o.paid === 'true',
+        note: o.note || ''
+      };
+    }
+
     async function markPaid(id) {
       if (apiUrl) {
         try { await callApi('markPaid', { id }); } catch(e) { toast(e.message); }
@@ -895,17 +836,25 @@
     async function loadDebts() {
       let orders = [];
       if (apiUrl) {
-        try { orders = await callApi('getAllUnpaid'); }
-        catch(e) { orders = localOrders.filter(o => !o.paid); }
+        try {
+          orders = (await callApi('getAllUnpaid') || []).map(normalizeOrder);
+          // 更新本地：只保留已付的本地紀錄，未付以 Sheet 為準
+          const paidLocal = localOrders.filter(o => o.paid);
+          const unpaidIds = new Set(orders.map(o => o.id));
+          localOrders = paidLocal.filter(o => !unpaidIds.has(o.id)).concat(orders);
+          localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
+        } catch (e) {
+          orders = localOrders.filter(o => !o.paid);
+          toast('無法連線 Sheet，顯示本機欠款');
+        }
       } else {
         orders = localOrders.filter(o => !o.paid);
       }
 
-      // 按 initial 汇总
       const map = {};
       orders.forEach(o => {
         if (!map[o.initial]) map[o.initial] = { name: o.name, total: 0, count: 0, details: [] };
-        map[o.initial].total += o.total;
+        map[o.initial].total += Number(o.total) || 0;
         map[o.initial].count++;
         map[o.initial].details.push(`${o.date} ${o.mealCode}.$${o.total}`);
       });
@@ -931,6 +880,7 @@
           </tbody>
         </table>
         <p style="margin-top:10px;font-weight:600">總欠款：$${keys.reduce((s,k)=>s+map[k].total,0)}</p>
+        <p style="font-size:.8rem;color:var(--muted);margin-top:6px">資料來源：${apiUrl ? 'Google Sheet' : '本機快取'}</p>
       `;
     }
 
@@ -1030,29 +980,29 @@
       const raw = document.getElementById('importJson').value.trim();
       if (!raw) { toast('請貼上 JSON'); return; }
       try {
-        // 容許 AI 偶爾包了 ```json ... ```
         let cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
         const data = JSON.parse(cleaned);
         if (!Array.isArray(data)) throw new Error('必須是陣列 [ {...}, ... ]');
-        let count = 0;
         data.forEach(item => {
-          if (!item.date || !item.code || !item.name || item.price == null) {
-            throw new Error('每項需要 date, code, name, price。問題項：' + JSON.stringify(item).slice(0,80));
+          if (!item.date && item.date !== '' && item.date !== '*') {
+            // date can be * for sets
           }
-          if (!DEFAULT_MENUS[item.date]) DEFAULT_MENUS[item.date] = [];
-          const idx = DEFAULT_MENUS[item.date].findIndex(m => m.code === item.code);
-          const entry = { code: item.code, name: item.name, price: Number(item.price) };
-          if (idx >= 0) DEFAULT_MENUS[item.date][idx] = entry;
-          else DEFAULT_MENUS[item.date].push(entry);
-          count++;
+          if (!item.code || !item.name || item.price == null) {
+            throw new Error('每項需要 code, name, price（固定套餐 date 填 *）。問題：' + JSON.stringify(item).slice(0,80));
+          }
         });
-        localStorage.setItem('lunch_menus', JSON.stringify(DEFAULT_MENUS));
-        populateDateSelects();
-        renderMeals();
-        toast(`✅ 成功匯入 ${count} 項菜單`);
-        // 菜單主要存在本地；Sheets 同步可選
+        // 寫入 Sheet（若有 API）
         if (apiUrl) {
-          callApi('importMenus', { count }).catch(() => {});
+          callApi('importMenus', { items: data }).then(() => {
+            toast('✅ 已寫入 Google Sheet（' + data.length + ' 項）');
+            loadMenus().then(() => { populateDateSelects(); renderMeals(); });
+          }).catch(e => toast('寫入 Sheet 失敗：' + e.message));
+        } else {
+          applyMenuRows(data);
+          localStorage.setItem('lunch_menus_cache', JSON.stringify(data));
+          populateDateSelects();
+          renderMeals();
+          toast('✅ 已匯入本機（' + data.length + ' 項）。設定 API 後可同步到 Sheet');
         }
       } catch (e) {
         toast('匯入失敗：' + e.message);
@@ -1081,7 +1031,7 @@
 3. name 用繁體中文，盡量完整保留原名。
 4. price 只取數字（不要 $ 符號）。
 5. 如果同一日有多個 A-G，全部列出。
-6. 固定套餐（酸辣米線、快餐等）可省略，因為系統已內建。
+6. 固定套餐（酸辣米線、快餐等）用 date:"*" ，例如 {"date":"*","code":"SET1","name":"酸辣米線套餐","price":48}
 7. 如果圖片有多個日期，全部輸出在同一個陣列。
 8. 只輸出 JSON 陣列，不要其他文字。
 
@@ -1106,6 +1056,7 @@
       if (!apiUrl) throw new Error('未設定 API 網址');
 
       const writeActions = ['addOrder', 'markPaid', 'deleteOrder', 'setSetting', 'importMenus'];
+      // getMenus / getOrders / getAllUnpaid → JSONP 讀取
 
       if (writeActions.includes(action)) {
         // 寫入：no-cors，無法讀回傳，但資料會寫入 Sheet
@@ -1172,10 +1123,11 @@
     }
 
     function clearLocalCache() {
-      if (!confirm('確定清除本機所有訂單與設定？')) return;
+      if (!confirm('清除本機快取？\n（不會刪除 Google Sheet 的資料；重新整理後會再從 Sheet 載入）')) return;
       localStorage.removeItem('lunch_orders');
       localStorage.removeItem('lunch_initials');
       localStorage.removeItem('lunch_pickup');
+      localStorage.removeItem('lunch_menus_cache');
       localOrders = [];
       knownInitials = [];
       pickupPerson = '';
@@ -1199,19 +1151,29 @@
 
     // ===================== Apps Script 說明 =====================
     const SETUP_TEXT = `
-【重要】請用下方最新 Apps Script 重新部署（必須支援 doGet JSONP，否則會 CORS 失敗）
+【重要】請用下方最新 Apps Script 重新部署
 
-1. 建立 Google Sheet
-   - 開啟 https://sheets.google.com 新建試算表，命名「六記訂飯」
-   - 建立工作表：
+1. 建立 Google Sheet「六記訂飯」，共 3 個工作表：
 
-   【Orders】第一列標題（請完整複製）：
-   id | timestamp | initial | name | date | mealCode | mealName | mealPrice | takeawayFee | drink | drinkPrice | total | paid | note
+【Orders】第一列標題：
+id | timestamp | initial | name | date | mealCode | mealName | mealPrice | takeawayFee | drink | drinkPrice | total | paid | note
 
-   【Settings】第一列：
-   key | value
+【Menus】第一列標題（菜單由此讀取）：
+date | code | name | price
 
-2. Apps Script（擴充功能 → Apps Script）刪除舊碼，貼上下方全部：
+  例子：
+  2025-10-28 | A | 日式咖喱牛腩 | 52
+  2025-10-28 | B | 豆角腩片燒茄子飯 | 50
+  *          | SET1 | 酸辣米線套餐（選一） | 48
+  *          | SET2 | 快餐 | 48
+
+  ※ 固定套餐：date 欄填 * 或 FIXED 或 每天（會顯示在每日的「固定套餐」區）
+  ※ 一般每日飯：date 填 YYYY-MM-DD（例如 2025-10-28）
+
+【Settings】第一列：
+key | value
+
+2. Apps Script 全文（刪舊貼新）：
 
 ─── 複製開始 ───
 function doPost(e) {
@@ -1233,7 +1195,7 @@ function doGet(e) {
   var result, out;
   try {
     if (!action) {
-      out = JSON.stringify({ status: 'ok', msg: '六記訂飯 API v2' });
+      out = JSON.stringify({ status: 'ok', msg: '六記訂飯 API v3' });
     } else {
       result = handleAction(action, p);
       out = JSON.stringify({ result: result });
@@ -1265,39 +1227,32 @@ function handleAction(action, data) {
     result = { ok: true };
   }
   else if (action === 'getOrders') {
-    var sheet = ss.getSheetByName('Orders');
-    var rows = sheet.getDataRange().getValues();
-    if (rows.length < 2) return [];
-    var headers = rows[0];
-    result = rows.slice(1).map(function(r) {
-      var o = {};
-      headers.forEach(function(h, i) { o[h] = r[i]; });
-      o.paid = o.paid === true || o.paid === 'TRUE';
-      return o;
-    }).filter(function(o) {
+    result = readOrders_(ss).filter(function(o) {
       return !data.date || String(o.date) === String(data.date);
     });
   }
   else if (action === 'getAllUnpaid') {
-    var sheet = ss.getSheetByName('Orders');
+    result = readOrders_(ss).filter(function(o) { return !o.paid; });
+  }
+  else if (action === 'getMenus') {
+    var sheet = ss.getSheetByName('Menus');
+    if (!sheet) throw new Error('找不到 Menus 工作表');
     var rows = sheet.getDataRange().getValues();
     if (rows.length < 2) return [];
-    var headers = rows[0];
+    var headers = rows[0].map(function(h) { return String(h).trim(); });
     result = rows.slice(1).map(function(r) {
       var o = {};
       headers.forEach(function(h, i) { o[h] = r[i]; });
-      o.paid = o.paid === true || o.paid === 'TRUE';
       return o;
-    }).filter(function(o) { return !o.paid; });
+    }).filter(function(o) { return o.code || o.name; });
   }
   else if (action === 'markPaid') {
     var sheet = ss.getSheetByName('Orders');
     var rows = sheet.getDataRange().getValues();
+    var headers = rows[0];
+    var paidCol = headers.indexOf('paid') + 1;
     for (var i = 1; i < rows.length; i++) {
       if (String(rows[i][0]) === String(data.id)) {
-        // paid 欄位：找 header
-        var headers = rows[0];
-        var paidCol = headers.indexOf('paid') + 1;
         if (paidCol > 0) sheet.getRange(i + 1, paidCol).setValue('TRUE');
         break;
       }
@@ -1330,30 +1285,58 @@ function handleAction(action, data) {
     result = { ok: true };
   }
   else if (action === 'importMenus') {
-    result = { ok: true };
+    // data.items = [{date,code,name,price}, ...]
+    var items = data.items;
+    if (typeof items === 'string') {
+      try { items = JSON.parse(items); } catch (e) { items = []; }
+    }
+    if (!items || !items.length) {
+      result = { ok: true, count: 0 };
+    } else {
+      var sheet = ss.getSheetByName('Menus');
+      if (!sheet) {
+        sheet = ss.insertSheet('Menus');
+        sheet.appendRow(['date', 'code', 'name', 'price']);
+      }
+      items.forEach(function(it) {
+        sheet.appendRow([it.date || '*', it.code, it.name, it.price]);
+      });
+      result = { ok: true, count: items.length };
+    }
   }
   else {
     throw new Error('Unknown action: ' + action);
   }
   return result;
 }
+
+function readOrders_(ss) {
+  var sheet = ss.getSheetByName('Orders');
+  var rows = sheet.getDataRange().getValues();
+  if (rows.length < 2) return [];
+  var headers = rows[0];
+  return rows.slice(1).map(function(r) {
+    var o = {};
+    headers.forEach(function(h, i) { o[h] = r[i]; });
+    o.paid = o.paid === true || o.paid === 'TRUE' || o.paid === 'true';
+    return o;
+  });
+}
 ─── 複製結束 ───
 
-3. 部署（必須重新部署才生效）
-   - 右上角「部署」→「管理部署作業」→ 編輯（鉛筆）或「新增部署作業」
-   - 類型：網頁應用程式
-   - 執行身分：我
-   - 具有存取權的使用者：任何人
-   - 部署後複製新網址，貼回本頁 API 欄位
+3. 部署：管理部署作業 → 編輯 → 新版本 → 部署（執行身分：我；任何人）
 
-4. 完成
-
-價錢規則（系統已內建）：
-- 凍飲 +$2
+4. 價錢規則
+- 飲品免費；凍飲另加 $2
 - 每單外賣 +$1
-- 當日滿 5 份，每份飯再減 $2（匯出 WhatsApp 時自動計算）
+- 當日滿 5 份，每飯 −$2
 
-注意：本地模式不設 API 也能用；正式多人請一定更新 Apps Script。
+5. 固定套餐輸入方法
+在 Menus 工作表新增列，date 填 * ，例如：
+* | SET1 | 酸辣米線套餐（特級墨魚王/牛丸…） | 48
+* | SET5 | 快餐（雞扒/豬扒/魚柳…） | 48
+
+每日 A–G 則填實際日期 2025-10-28 | A | 菜名 | 52
 `;
   </script>
 </body>
