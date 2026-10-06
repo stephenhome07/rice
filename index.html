@@ -529,15 +529,19 @@
       }
 
       (async () => {
+        // 必須串列：Chrome 同時打多個 Google Script 會超時
         const ok = await testConnection();
         await loadMenus();
         populateDateSelects();
         renderMeals();
-        loadOrders();
-        loadDebts();
+        await loadOrders();
+        await loadDebts();
         generateExport();
         if (!ok && !isInAppBrowser()) {
-          showConnBar('❌ 連不上 Google Sheet。可試「重新連線」，或改用 Safari / Chrome。', 'err');
+          const tip = isChromeMobile()
+            ? '❌ Chrome 連線不穩。可試「重新連線」，或改用 Samsung Internet；亦可關閉 Chrome「安全 DNS」。'
+            : '❌ 連不上 Google Sheet。可試「重新連線」，或改用系統瀏覽器。';
+          showConnBar(tip, 'err');
         }
       })();
     });
@@ -1498,7 +1502,7 @@
       });
     }
 
-    // ===================== API 呼叫（手機相容）=====================
+    // ===================== API 呼叫（Chrome 相容：排隊 + 重試）=====================
     function showConnBar(msg, type) {
       const bar = document.getElementById('connBar');
       const el = document.getElementById('connMsg');
@@ -1518,17 +1522,30 @@
 
     function openInBrowser() {
       const url = location.href.split('#')[0];
-      toast('請用右上角選單「在瀏覽器開啟／Open in browser」');
-      // 嘗試跳出 WebView
-      try {
-        window.open(url, '_blank');
-      } catch (e) {}
-      // iOS
+      toast('請用系統瀏覽器開啟（Safari / Chrome / Samsung Internet）');
+      try { window.open(url, '_blank'); } catch (e) {}
       const a = document.createElement('a');
-      a.setAttribute('href', url);
-      a.setAttribute('target', '_blank');
-      a.setAttribute('rel', 'noopener');
-      a.click();
+      a.href = url; a.target = '_blank'; a.rel = 'noopener';
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { try { document.body.removeChild(a); } catch (e) {} }, 500);
+    }
+
+    function isChromeMobile() {
+      const ua = navigator.userAgent || '';
+      return /Chrome/i.test(ua) && /Mobile|Android/i.test(ua) && !/Edg|OPR|SamsungBrowser/i.test(ua);
+    }
+
+    // 串列佇列：Chrome 同時多個 script.google.com 請求會被節流導致超時
+    let _apiQueue = Promise.resolve();
+    function enqueueApi(fn) {
+      const run = _apiQueue.then(() => fn(), () => fn());
+      // 下一個等上一個完成（成功或失敗都繼續）
+      _apiQueue = run.then(() => {}, () => {});
+      return run;
+    }
+
+    function delay(ms) {
+      return new Promise(r => setTimeout(r, ms));
     }
 
     async function testConnection() {
@@ -1537,9 +1554,8 @@
         await callApi('ping', {});
         hideConnBar();
         if (!isInAppBrowser()) {
-          // 短暫顯示成功
           showConnBar('✅ 已連接 Google Sheet', 'ok');
-          setTimeout(hideConnBar, 2500);
+          setTimeout(hideConnBar, 2000);
         }
         return true;
       } catch (e) {
@@ -1558,19 +1574,18 @@
       await loadMenus();
       populateDateSelects();
       renderMeals();
-      loadOrders();
-      loadDebts();
+      await loadOrders();
+      await loadDebts();
       if (ok) {
         showConnBar('✅ 已連接 Google Sheet', 'ok');
         setTimeout(hideConnBar, 2500);
         toast('連線成功');
       } else {
-        showConnBar('❌ 仍然連不上。若用 WhatsApp 開啟，請改用 Safari / Chrome。', 'err');
+        showConnBar('❌ 仍然連不上。Chrome 可試：關閉「安全 DNS」或改用 Samsung Internet。', 'err');
         toast('連線失敗');
       }
     }
 
-    /** 寫入：用 form + hidden iframe（比 no-cors fetch 更相容手機／WebView） */
     function postViaIframe(payload) {
       return new Promise((resolve) => {
         const iframeName = 'gas_iframe_' + Date.now();
@@ -1578,77 +1593,45 @@
         if (!iframe) {
           iframe = document.createElement('iframe');
           iframe.id = 'gasIframe';
-          iframe.name = iframeName;
           iframe.style.cssText = 'width:0;height:0;border:0;position:absolute;left:-9999px';
           document.body.appendChild(iframe);
-        } else {
-          iframe.name = iframeName;
         }
+        iframe.name = iframeName;
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = apiUrl;
         form.target = iframeName;
         form.style.display = 'none';
-        // Apps Script 對 text/plain body 較友善；form 用一個欄位裝 JSON
         const input = document.createElement('input');
         input.type = 'hidden';
         input.name = 'payload';
         input.value = JSON.stringify(payload);
         form.appendChild(input);
-        // 同時用 query 帶 action，方便 debug
         document.body.appendChild(form);
-        try {
-          form.submit();
-        } catch (e) {
-          console.warn('form submit', e);
-        }
+        try { form.submit(); } catch (e) { console.warn(e); }
         setTimeout(() => {
           try { document.body.removeChild(form); } catch (e) {}
           resolve({ ok: true });
-        }, 800);
+        }, 600);
       });
     }
 
-    async function callApi(action, payload = {}) {
-      if (!apiUrl) {
-        apiUrl = DEFAULT_API_URL;
-      }
-
-      const writeActions = ['addOrder', 'markPaid', 'markAllPaid', 'deleteOrder', 'setSetting', 'importMenus'];
-
-      if (writeActions.includes(action)) {
-        const body = { action, ...payload };
-        // 雙通道：iframe form + no-cors fetch，提高手機成功率
-        try {
-          await postViaIframe(body);
-        } catch (e) { console.warn(e); }
-        try {
-          await fetch(apiUrl, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify(body),
-            cache: 'no-store'
-          });
-        } catch (e) {
-          console.warn('fetch write', e);
-        }
-        return { ok: true };
-      }
-
-      // 讀取：JSONP（加 cache buster，避免手機快取）
+    /** 單次 JSONP（唔經佇列） */
+    function jsonpOnce(action, payload, timeoutMs) {
       return new Promise((resolve, reject) => {
-        const cbName = '_lunchCb_' + Date.now() + '_' + Math.floor(Math.random() * 9999);
-        const timeoutMs = action === 'ping' ? 10000 : 15000;
+        const cbName = '_lunchCb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+        let script = null;
         const timeout = setTimeout(() => {
           cleanup();
-          reject(new Error('連線逾時（手機若用 WhatsApp 內置瀏覽器請改用 Safari/Chrome）'));
+          reject(new Error('連線逾時'));
         }, timeoutMs);
 
         function cleanup() {
           clearTimeout(timeout);
           try { delete window[cbName]; } catch (e) { window[cbName] = undefined; }
-          if (script && script.parentNode) script.parentNode.removeChild(script);
+          if (script && script.parentNode) {
+            try { script.parentNode.removeChild(script); } catch (e) {}
+          }
         }
 
         window[cbName] = function (data) {
@@ -1657,28 +1640,67 @@
           else resolve(data && data.result !== undefined ? data.result : data);
         };
 
-        const script = document.createElement('script');
+        script = document.createElement('script');
         const params = new URLSearchParams();
-        params.set('action', action === 'ping' ? '' : action);
-        if (action === 'ping') {
-          // 空 action → doGet 回 status ok
-        } else {
-          params.set('action', action);
-        }
+        if (action && action !== 'ping') params.set('action', action);
         params.set('callback', cbName);
-        params.set('_t', String(Date.now())); // cache buster
+        params.set('_t', String(Date.now()) + String(Math.random()).slice(2, 6));
         Object.keys(payload || {}).forEach(k => {
           if (payload[k] !== undefined && payload[k] !== null) {
             params.set(k, typeof payload[k] === 'object' ? JSON.stringify(payload[k]) : String(payload[k]));
           }
         });
         script.src = apiUrl + (apiUrl.indexOf('?') >= 0 ? '&' : '?') + params.toString();
-        script.async = true;
+        // Chrome：唔用 async，按順序執行較穩
+        script.async = false;
+        script.charset = 'utf-8';
         script.onerror = function () {
           cleanup();
-          reject(new Error('無法載入 Google Script（可能被 App 內置瀏覽器攔截）'));
+          reject(new Error('無法載入 Google Script'));
         };
-        document.body.appendChild(script);
+        // 插入 <head> 有時比 body 更穩（Chrome）
+        (document.head || document.body).appendChild(script);
+      });
+    }
+
+    async function callApi(action, payload = {}) {
+      if (!apiUrl) apiUrl = DEFAULT_API_URL;
+
+      const writeActions = ['addOrder', 'markPaid', 'markAllPaid', 'deleteOrder', 'setSetting', 'importMenus'];
+
+      if (writeActions.includes(action)) {
+        const body = { action, ...payload };
+        try { await postViaIframe(body); } catch (e) { console.warn(e); }
+        try {
+          await fetch(apiUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(body),
+            cache: 'no-store'
+          });
+        } catch (e) { console.warn('fetch write', e); }
+        return { ok: true };
+      }
+
+      // 讀取：佇列 + 重試（Chrome 專用較長 timeout）
+      const isPing = action === 'ping';
+      const baseTimeout = isChromeMobile() ? (isPing ? 20000 : 25000) : (isPing ? 12000 : 18000);
+      const maxTry = isChromeMobile() ? 3 : 2;
+
+      return enqueueApi(async () => {
+        let lastErr = null;
+        for (let i = 0; i < maxTry; i++) {
+          if (i > 0) await delay(400 * i); // 重試前稍等，避免 Chrome 節流
+          try {
+            const result = await jsonpOnce(action, payload, baseTimeout + i * 5000);
+            return result;
+          } catch (e) {
+            lastErr = e;
+            console.warn('API try', i + 1, action, e.message);
+          }
+        }
+        throw lastErr || new Error('連線失敗');
       });
     }
 
