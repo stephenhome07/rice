@@ -143,6 +143,49 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     .filter-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
     .filter-bar select { width: auto; min-width: 120px; }
+
+    .set-options-panel {
+      margin-top: 12px; padding: 12px; background: #fff8f0; border: 1px solid #f0d9b5;
+      border-radius: 10px; display: none;
+    }
+    .set-options-panel.visible { display: block; }
+    .set-options-panel h4 { font-size: .9rem; color: var(--warning); margin-bottom: 8px; }
+    .overview-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px; margin-top: 12px;
+    }
+    .day-card {
+      background: #fff; border: 1px solid var(--border); border-radius: 12px;
+      padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.05);
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .day-card.today { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(196,30,58,.15); }
+    .day-card .day-title { font-weight: 700; font-size: 1rem; display: flex; justify-content: space-between; align-items: center; }
+    .day-card .day-meta { font-size: .8rem; color: var(--muted); }
+    .day-card .people-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+    .chip {
+      background: #f0ebe3; padding: 2px 8px; border-radius: 999px; font-size: .75rem; font-weight: 500;
+    }
+    .chip.unpaid { background: #fee2e2; color: #991b1b; }
+    .chip.paid { background: #d1fae5; color: #065f46; }
+    .meal-bars { font-size: .8rem; }
+    .meal-bar-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+    .meal-bar-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .meal-bar-track { width: 60px; height: 8px; background: #eee; border-radius: 4px; overflow: hidden; }
+    .meal-bar-fill { height: 100%; background: var(--primary); border-radius: 4px; }
+    .pickup-row { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+    .pickup-row input { flex: 1; padding: 6px 8px; font-size: .85rem; }
+    .stat-big {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px;
+    }
+    .stat-card {
+      background: linear-gradient(135deg, #1e3a5f, #2d5a87); color: #fff;
+      border-radius: 12px; padding: 14px; text-align: center;
+    }
+    .stat-card.alt { background: linear-gradient(135deg, #0d7a4f, #14a36a); }
+    .stat-card.warn { background: linear-gradient(135deg, #b45309, #d97706); }
+    .stat-card .num { font-size: 1.6rem; font-weight: 700; }
+    .stat-card .lbl { font-size: .75rem; opacity: .9; }
   </style>
 </head>
 <body>
@@ -574,13 +617,15 @@
         </label>
       `).join('') : '<p style="color:#999;font-size:.9rem">此日無 A–G 菜單</p>';
 
+      // 套餐選項欄
+      let optHtml = '<div class="set-options-panel" id="setOptionsPanel"><h4>套餐選項</h4><div id="setOptionsFields"></div></div>';
       if (SET_MENUS.length) {
         setBox.innerHTML = `
           <div class="set-box">
-            <h3>固定套餐（每日供應）</h3>
+            <h3>固定套餐（每日供應）· 共 ${SET_MENUS.length} 款</h3>
             <div class="meal-grid">
               ${SET_MENUS.map(m => `
-                <label class="meal-item" data-code="${m.code}" data-name="${m.name}" data-price="${m.price}">
+                <label class="meal-item" data-code="${m.code}" data-name="${m.name}" data-price="${m.price}" data-isset="1">
                   <input type="radio" name="meal" value="${m.code}" />
                   <span class="meal-code">套</span>
                   <span class="meal-name">${m.name}</span>
@@ -588,10 +633,11 @@
                 </label>
               `).join('')}
             </div>
+            ${optHtml}
           </div>
         `;
       } else {
-        setBox.innerHTML = '';
+        setBox.innerHTML = '<p style="font-size:.85rem;color:#999;margin-top:8px">未載入固定套餐（Menus 表 date 填 * 且 code 如 SET1）</p>';
       }
 
       document.querySelectorAll('.meal-item input').forEach(radio => {
@@ -602,13 +648,56 @@
           selectedMeal = {
             code: item.dataset.code,
             name: item.dataset.name,
-            price: parseInt(item.dataset.price, 10)
+            price: parseInt(item.dataset.price, 10),
+            isSet: item.dataset.isset === '1'
           };
+          showSetOptions(selectedMeal.code);
           calcPrice();
         });
       });
       selectedMeal = null;
       calcPrice();
+    }
+
+    function showSetOptions(code) {
+      const panel = document.getElementById('setOptionsPanel');
+      const fields = document.getElementById('setOptionsFields');
+      if (!panel || !fields) return;
+      const cfg = SET_CHOICES[code];
+      if (!cfg) {
+        panel.classList.remove('visible');
+        fields.innerHTML = '';
+        return;
+      }
+      panel.classList.add('visible');
+      if (cfg.multi) {
+        fields.innerHTML = cfg.multi.map(g => `
+          <div style="margin-bottom:8px">
+            <label>${g.label}</label>
+            <select class="set-opt" data-key="${g.key}">
+              ${g.options.map(o => '<option value="'+o+'">'+o+'</option>').join('')}
+            </select>
+          </div>
+        `).join('');
+      } else {
+        fields.innerHTML = `
+          <label>${cfg.label}</label>
+          <select class="set-opt" data-key="choice">
+            ${cfg.options.map(o => '<option value="'+o+'">'+o+'</option>').join('')}
+          </select>
+        `;
+      }
+    }
+
+    function getSetOptionText() {
+      const selects = document.querySelectorAll('.set-opt');
+      if (!selects.length) return '';
+      const parts = [];
+      selects.forEach(s => {
+        const key = s.dataset.key;
+        parts.push((key && key !== 'choice' ? key + ':' : '') + s.value);
+      });
+      return parts.join(' / ');
     }
 
     async function loadMenus() {
@@ -652,24 +741,47 @@
       console.log('Menus loaded:', Object.keys(MENUS).length, 'days,', SET_MENUS.length, 'sets');
     }
 
+    // 套餐可選細項（點飯時多一欄）
+    const SET_CHOICES = {
+      SET1: { label: '配料（選一）', options: ['特級墨魚王', '特級牛丸', '雞扒', '豬扒', '雞亦', '生炸雞脾（+$3）'] },
+      SET2: { label: '餃子（選一，每款3只）', options: ['鮮蝦雲吞', '鳳城水餃', '韭菜餃', '椰菜餃'] },
+      SET3: { label: '配料（選一，雙拼+$8）', options: ['特級墨魚王', '特級牛丸', '雙拼墨魚王+牛丸（+$8）'] },
+      SET4: { label: '餃子（選一，每款4只）', options: ['鮮蝦雲吞', '鳳城水餃', '韭菜餃', '椰菜餃'] },
+      SET5: { label: '快餐組合', multi: [
+        { key: 'main', label: '主菜', options: ['雞扒', '豬扒', '魚柳'] },
+        { key: 'side', label: '配菜', options: ['火腿', '腸', '蛋', '餐肉'] },
+        { key: 'carb', label: '跟', options: ['飯', '意粉'] },
+        { key: 'sauce', label: '汁', options: ['黑椒汁', '茄汁', '白汁'] }
+      ]},
+      SET6: { label: '午餐', options: ['標準（雪菜肉絲麵+火腿奄列+牛油方包）'] },
+      SET7: { label: '主菜（選一）', options: ['雞扒', '豬扒', '魚柳', '雞亦', '生炸雞脾（+$3）'] },
+      SET8: { label: '炒粉麵（選一）', options: ['楊州炒飯', '咸魚雞粒炒飯', '生炒牛肉飯', '星洲炒米', '廈門炒米', '雪菜肉絲炆米', '干炒牛河', '豉油皇三絲炒麵', '西炒飯', '咸魚叉燒粒炒飯'] }
+    };
+
     function applyMenuRows(rows) {
       MENUS = {};
       SET_MENUS = [];
       rows.forEach(r => {
-        const date = String(r.date || '').trim();
-        const code = String(r.code || '').trim();
-        const name = String(r.name || '').trim();
+        let date = String(r.date != null ? r.date : '').trim();
+        const code = String(r.code != null ? r.code : '').trim();
+        const name = String(r.name != null ? r.name : '').trim();
         const price = Number(r.price);
         if (!code || !name || isNaN(price)) return;
         const item = { code, name, price };
-        // 固定套餐：date 為 * / FIXED / 每天 / 空白
-        if (!date || date === '*' || date === 'FIXED' || date === '每天') {
-          SET_MENUS.push(item);
+        // 固定套餐：date 為 * / FIXED / 每天 / 空白，或 code 以 SET 開頭
+        const isSet = !date || date === '*' || date === 'FIXED' || date === '每天'
+          || date === '固定' || /^SET/i.test(code);
+        if (isSet) {
+          // 避免重複
+          if (!SET_MENUS.find(x => x.code === code)) SET_MENUS.push(item);
         } else {
-          // 正規化日期：支援 2025/10/28 或 28/10/2025 等，統一 YYYY-MM-DD
           const dk = normalizeDate(date);
-          if (!MENUS[dk]) MENUS[dk] = [];
-          MENUS[dk].push(item);
+          if (!dk || dk === '*') {
+            if (!SET_MENUS.find(x => x.code === code)) SET_MENUS.push(item);
+          } else {
+            if (!MENUS[dk]) MENUS[dk] = [];
+            MENUS[dk].push(item);
+          }
         }
       });
     }
@@ -748,10 +860,14 @@
       const note = document.getElementById('orderNote').value.trim();
       const date = document.getElementById('orderDate').value;
       const name = document.getElementById('userName').value.trim();
-      const mealP = selectedMeal.price;
+      const setOpt = getSetOptionText();
+      let mealP = selectedMeal.price;
+      // 生炸雞脾 +$3
+      if (setOpt && setOpt.includes('生炸雞脾')) mealP += 3;
+      if (setOpt && setOpt.includes('雙拼') && setOpt.includes('+$8')) mealP += 8;
+      const mealNameFull = setOpt ? (selectedMeal.name + '（' + setOpt + '）') : selectedMeal.name;
       const drinkP = getDrinkPrice(drink);
       const takeaway = TAKEAWAY_FEE;
-      // 個人 total 先唔計 bulk（結算時按當日總份數再減）
       const total = mealP + takeaway + drinkP;
 
       let drinkStr = '';
@@ -768,14 +884,14 @@
         name,
         date,
         mealCode: selectedMeal.code,
-        mealName: selectedMeal.name,
+        mealName: mealNameFull,
         mealPrice: mealP,
         takeawayFee: takeaway,
         drink: drinkStr,
         drinkPrice: drinkP,
         total,
         paid: false,
-        note
+        note: note || (setOpt ? '選項:' + setOpt : '')
       };
 
       // 記住 initial
@@ -983,77 +1099,123 @@
         orders = localOrders.slice();
       }
 
-      // 按日子分組
       const byDate = {};
       orders.forEach(o => {
         const d = normalizeDate(o.date) || o.date;
+        if (!d) return;
         if (!byDate[d]) byDate[d] = [];
         byDate[d].push(o);
       });
       const dates = Object.keys(byDate).sort();
+      const today = toDateKey(new Date());
 
-      // 填充拎飯人日子選單
       const sel = document.getElementById('pickupDateSelect');
       if (sel) {
         const prev = sel.value;
         sel.innerHTML = dates.map(d => {
-          try {
-            return '<option value="' + d + '">' + formatDateLabel(new Date(d + 'T12:00:00')) + '</option>';
-          } catch (e) {
-            return '<option value="' + d + '">' + d + '</option>';
-          }
+          let label = d;
+          try { label = formatDateLabel(new Date(d + 'T12:00:00')); } catch (e) {}
+          return '<option value="' + d + '">' + label + '</option>';
         }).join('');
         if (dates.includes(prev)) sel.value = prev;
         sel.onchange = function() {
           document.getElementById('pickupByDate').value = pickupByDateMap[sel.value] || '';
         };
-        if (dates.length) {
-          document.getElementById('pickupByDate').value = pickupByDateMap[sel.value] || '';
+        if (dates.length) document.getElementById('pickupByDate').value = pickupByDateMap[sel.value] || '';
+      }
+
+      const body = document.getElementById('overviewBody');
+      const stats = document.getElementById('overviewStats');
+      // body was table - we'll replace parent usage: put cards in a wrapper
+      // Use overviewBody as container for cards (change from tbody if needed)
+      const table = body && body.closest('table');
+      let cardHost = document.getElementById('overviewCards');
+      if (!cardHost) {
+        cardHost = document.createElement('div');
+        cardHost.id = 'overviewCards';
+        cardHost.className = 'overview-grid';
+        if (table && table.parentNode) {
+          table.style.display = 'none';
+          table.parentNode.insertBefore(cardHost, table);
+        } else if (body) {
+          body.innerHTML = '';
         }
       }
 
-      const tbody = document.getElementById('overviewBody');
-      const stats = document.getElementById('overviewStats');
       if (!dates.length) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999">暫無訂單</td></tr>';
-        stats.innerHTML = '';
+        cardHost.innerHTML = '<p style="color:#999;grid-column:1/-1;text-align:center">暫無訂單</p>';
+        if (stats) stats.innerHTML = '';
         return;
       }
 
-      let grandTotal = 0;
-      let grandCount = 0;
-      tbody.innerHTML = dates.map(d => {
+      let grandTotal = 0, grandCount = 0, unpaidCount = 0;
+      dates.forEach(d => {
+        const list = byDate[d];
+        grandCount += list.length;
+        const sum = list.reduce((s, o) => s + getEffectiveTotal(o, list.length), 0);
+        grandTotal += sum;
+        unpaidCount += list.filter(o => !o.paid).length;
+      });
+
+      if (stats) {
+        stats.innerHTML = `
+          <div class="stat-big">
+            <div class="stat-card"><div class="num">${dates.length}</div><div class="lbl">已訂日子</div></div>
+            <div class="stat-card alt"><div class="num">${grandCount}</div><div class="lbl">總份數</div></div>
+            <div class="stat-card warn"><div class="num">$${grandTotal}</div><div class="lbl">合計${unpaidCount ? ' · '+unpaidCount+'未付' : ''}</div></div>
+          </div>`;
+      }
+
+      const maxMeal = Math.max(1, ...dates.map(d => {
+        const map = {};
+        byDate[d].forEach(o => { map[o.mealCode] = (map[o.mealCode]||0)+1; });
+        return Math.max(1, ...Object.values(map));
+      }));
+
+      cardHost.innerHTML = dates.map(d => {
         const list = byDate[d];
         const n = list.length;
-        grandCount += n;
         const hasBulk = n >= BULK_THRESHOLD;
         const sum = list.reduce((s, o) => s + getEffectiveTotal(o, n), 0);
-        grandTotal += sum;
-        const people = [...new Set(list.map(o => o.initial))].join(', ');
-        // 飯餐摘要
-        const mealMap = {};
-        list.forEach(o => {
-          const k = o.mealCode + '. ' + (o.mealName || '');
-          mealMap[k] = (mealMap[k] || 0) + 1;
-        });
-        const mealSummary = Object.entries(mealMap).map(([k,v]) => v + '×' + k).join('<br>');
         let dateLabel = d;
         try { dateLabel = formatDateLabel(new Date(d + 'T12:00:00')); } catch (e) {}
-        const pickup = pickupByDateMap[d] || '—';
-        return '<tr>' +
-          '<td><strong>' + dateLabel + '</strong></td>' +
-          '<td>' + n + (hasBulk ? ' <span class="badge badge-paid">滿5減</span>' : '') + '</td>' +
-          '<td style="font-size:.85rem">' + people + '</td>' +
-          '<td style="font-size:.8rem">' + mealSummary + '</td>' +
-          '<td>$' + sum + '</td>' +
-          '<td><strong>' + pickup + '</strong></td>' +
-          '</tr>';
+        const isToday = d === today;
+        const mealMap = {};
+        list.forEach(o => {
+          const k = (o.mealCode || '') + '. ' + (o.mealName || '');
+          mealMap[k] = (mealMap[k] || 0) + 1;
+        });
+        const bars = Object.entries(mealMap).sort((a,b)=>b[1]-a[1]).map(([k,v]) => {
+          const pct = Math.round(v / maxMeal * 100);
+          return `<div class="meal-bar-row"><span class="meal-bar-label" title="${k}">${v}× ${k}</span>
+            <div class="meal-bar-track"><div class="meal-bar-fill" style="width:${pct}%"></div></div></div>`;
+        }).join('');
+        const chips = list.map(o =>
+          `<span class="chip ${o.paid ? 'paid' : 'unpaid'}" title="${o.mealName||''}">${o.initial}${o.paid?'':' ·未付'}</span>`
+        ).join('');
+        const pickup = pickupByDateMap[d] || '';
+        return `<div class="day-card ${isToday ? 'today' : ''}">
+          <div class="day-title">
+            <span>${isToday ? '📍 ' : ''}${dateLabel}</span>
+            <span style="font-size:.85rem;color:var(--primary)">${n} 份${hasBulk ? ' ·滿5減' : ''}</span>
+          </div>
+          <div class="day-meta">合計 <strong>$${sum}</strong> · 拎飯：<strong>${pickup || '未定'}</strong></div>
+          <div class="people-chips">${chips}</div>
+          <div class="meal-bars">${bars}</div>
+          <div class="pickup-row">
+            <input type="text" placeholder="拎飯人" value="${pickup.replace(/"/g, '&quot;')}" data-date="${d}" class="pickup-input" />
+            <button class="btn btn-primary" style="padding:6px 10px;font-size:.8rem" onclick="savePickupFromCard('${d}', this)">儲存</button>
+          </div>
+        </div>`;
       }).join('');
+    }
 
-      stats.innerHTML =
-        '<div class="status-item">共 ' + dates.length + ' 日</div>' +
-        '<div class="status-item">' + grandCount + ' 份</div>' +
-        '<div class="status-item">合計 $' + grandTotal + '</div>';
+    function savePickupFromCard(d, btn) {
+      const input = btn.parentNode.querySelector('.pickup-input');
+      const person = (input && input.value || '').trim();
+      document.getElementById('pickupDateSelect').value = d;
+      document.getElementById('pickupByDate').value = person;
+      savePickupByDate();
     }
 
     async function savePickupByDate() {
@@ -1410,10 +1572,16 @@ function doGet(e) {
 /** 統一把 Sheet 日期轉成 YYYY-MM-DD（香港時區） */
 function fmtDate_(v) {
   if (v === null || v === undefined || v === '') return '';
+  // 保留 * / FIXED 等固定套餐標記，唔好當日期
+  if (typeof v === 'string') {
+    var t = v.trim();
+    if (t === '*' || t === 'FIXED' || t === '每天' || t === '固定') return t;
+  }
   if (Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime())) {
     return Utilities.formatDate(v, 'Asia/Hong_Kong', 'yyyy-MM-dd');
   }
   var s = String(v).trim();
+  if (s === '*' || s === 'FIXED' || s === '每天' || s === '固定') return s;
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
   return s;
 }
@@ -1472,6 +1640,8 @@ function handleAction(action, data) {
       o.code = o.code != null ? String(o.code).trim() : '';
       o.name = o.name != null ? String(o.name).trim() : '';
       o.price = Number(o.price);
+      // SET 開頭一律當固定套餐
+      if (/^SET/i.test(o.code)) o.date = '*';
       return o;
     }).filter(function(o) { return o.code || o.name; });
   }
