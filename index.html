@@ -476,7 +476,9 @@
     const BULK_THRESHOLD = 5;
 
     // ===================== 狀態 =====================
-    let apiUrl = localStorage.getItem('lunch_api_url') || '';
+    // 預設 API（所有同事手機可直接用，唔使再手動填）
+    const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbzeHpG7knP3E5yZvLblWAY_NT-nwhs9FZLT7_4li9PVJGQAL45o1WEWCyt1krC1_Utd/exec';
+    let apiUrl = localStorage.getItem('lunch_api_url') || DEFAULT_API_URL;
     let selectedMeal = null;
     let localOrders = JSON.parse(localStorage.getItem('lunch_orders') || '[]');
     let pickupPerson = localStorage.getItem('lunch_pickup') || '';
@@ -485,6 +487,7 @@
     // ===================== 初始化 =====================
     document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('todayLabel').textContent = formatDateLabel(new Date());
+      // 有預設 API 就隱藏設定盒
       if (apiUrl) document.getElementById('configBox').classList.add('hidden');
       document.getElementById('apiUrlInput').value = apiUrl;
       document.getElementById('pickupPerson').textContent = pickupPerson || '未設定';
@@ -1016,6 +1019,54 @@
       toast('已標記付款');
     }
 
+    /** 一鍵將某同事所有未付訂單標為已付（方便 PayMe 一次收齊） */
+    async function markAllPaidByInitial(initial) {
+      initial = String(initial || '').toUpperCase();
+      if (!initial) return;
+      const unpaid = localOrders.filter(o => !o.paid && String(o.initial).toUpperCase() === initial);
+      // 若本機無，嘗試從 Sheet 再拉
+      let list = unpaid;
+      if (apiUrl) {
+        try {
+          const all = (await callApi('getAllUnpaid') || []).map(normalizeOrder);
+          list = all.filter(o => String(o.initial).toUpperCase() === initial);
+        } catch (e) {
+          console.warn(e);
+        }
+      }
+      if (!list.length) {
+        toast(initial + ' 沒有未付訂單');
+        loadDebts();
+        return;
+      }
+      const total = list.reduce((s, o) => s + (Number(o.total) || 0), 0);
+      if (!confirm(`確認 ${initial} 已付清全部 ${list.length} 單（合共 $${total}）？\n（適合收齊 PayMe 後一次標記）`)) return;
+
+      // 優先用 API 一次處理
+      if (apiUrl) {
+        try {
+          await callApi('markAllPaid', { initial: initial });
+        } catch (e) {
+          // fallback：逐單 markPaid
+          console.warn('markAllPaid failed, fallback', e);
+          for (const o of list) {
+            try { await callApi('markPaid', { id: o.id }); } catch (e2) {}
+          }
+        }
+      }
+      const ids = new Set(list.map(o => String(o.id)));
+      localOrders = localOrders.map(o => ids.has(String(o.id)) || (String(o.initial).toUpperCase() === initial && !o.paid)
+        ? {...o, paid: true} : o);
+      // 確保該人所有未付都標已付
+      localOrders = localOrders.map(o =>
+        String(o.initial).toUpperCase() === initial ? {...o, paid: true} : o
+      );
+      localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
+      loadOrders();
+      loadDebts();
+      toast(`✅ ${initial} 共 ${list.length} 單已標為已付（$${total}）`);
+    }
+
     async function deleteOrder(id) {
       if (!confirm('確定刪除此訂單？')) return;
       if (apiUrl) {
@@ -1063,7 +1114,7 @@
       }
       box.innerHTML = `
         <table>
-          <thead><tr><th>Initial</th><th>次數</th><th>欠款</th><th>詳情</th></tr></thead>
+          <thead><tr><th>Initial</th><th>次數</th><th>欠款</th><th>詳情</th><th>操作</th></tr></thead>
           <tbody>
             ${keys.map(k => `
               <tr>
@@ -1071,6 +1122,10 @@
                 <td>${map[k].count}</td>
                 <td style="color:var(--danger);font-weight:700">$${map[k].total}</td>
                 <td style="font-size:.8rem;color:#666">${map[k].details.join('<br>')}</td>
+                <td>
+                  <button class="btn btn-success" style="padding:6px 12px;font-size:.8rem;white-space:nowrap"
+                    onclick="markAllPaidByInitial('${k}')">一鍵已付 $${map[k].total}</button>
+                </td>
               </tr>
             `).join('')}
           </tbody>
@@ -1419,7 +1474,7 @@
     async function callApi(action, payload = {}) {
       if (!apiUrl) throw new Error('未設定 API 網址');
 
-      const writeActions = ['addOrder', 'markPaid', 'deleteOrder', 'setSetting', 'importMenus'];
+      const writeActions = ['addOrder', 'markPaid', 'markAllPaid', 'deleteOrder', 'setSetting', 'importMenus'];
       // getMenus / getOrders / getAllUnpaid → JSONP 讀取
 
       if (writeActions.includes(action)) {
@@ -1657,6 +1712,28 @@ function handleAction(action, data) {
       }
     }
     result = { ok: true };
+  }
+  else if (action === 'markAllPaid') {
+    // 將某 initial 所有未付訂單一次標為已付
+    var sheet = ss.getSheetByName('Orders');
+    var rows = sheet.getDataRange().getValues();
+    var headers = rows[0];
+    var paidCol = headers.indexOf('paid') + 1;
+    var initialCol = headers.indexOf('initial') + 1;
+    var target = String(data.initial || '').toUpperCase();
+    var count = 0;
+    if (paidCol > 0 && initialCol > 0 && target) {
+      for (var i = 1; i < rows.length; i++) {
+        var ini = String(rows[i][initialCol - 1] || '').toUpperCase();
+        var paid = rows[i][paidCol - 1];
+        var isPaid = paid === true || paid === 'TRUE' || paid === 'true';
+        if (ini === target && !isPaid) {
+          sheet.getRange(i + 1, paidCol).setValue('TRUE');
+          count++;
+        }
+      }
+    }
+    result = { ok: true, count: count };
   }
   else if (action === 'deleteOrder') {
     var sheet = ss.getSheetByName('Orders');
