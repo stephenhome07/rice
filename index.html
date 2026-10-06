@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
   <title>六記 · 同事訂飯系統</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
@@ -217,6 +219,14 @@
     <!-- 拎飯人 -->
     <div class="pickup-bar" id="pickupBar">
       <div>📦 今日拎飯：<strong id="pickupPerson">未設定</strong></div>
+
+    <div id="connBar" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;font-size:.85rem;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      <span id="connMsg"></span>
+      <span style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-secondary" style="padding:6px 10px;font-size:.8rem" onclick="retryConnection()">重新連線</button>
+        <button class="btn btn-primary" style="padding:6px 10px;font-size:.8rem" onclick="openInBrowser()">用瀏覽器開啟</button>
+      </span>
+    </div>
       <button class="btn btn-secondary" style="padding:6px 12px;font-size:.85rem" onclick="editPickup()">更改</button>
     </div>
 
@@ -476,9 +486,24 @@
     const BULK_THRESHOLD = 5;
 
     // ===================== 狀態 =====================
-    // 預設 API（所有同事手機可直接用，唔使再手動填）
+    // 預設 API（強制使用，避免手機殘留舊網址）
     const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbzeHpG7knP3E5yZvLblWAY_NT-nwhs9FZLT7_4li9PVJGQAL45o1WEWCyt1krC1_Utd/exec';
-    let apiUrl = localStorage.getItem('lunch_api_url') || DEFAULT_API_URL;
+    let apiUrl = DEFAULT_API_URL;
+    try {
+      const saved = localStorage.getItem('lunch_api_url');
+      // 只接受同一個 script ID 嘅網址，否則重置
+      if (saved && saved.indexOf('AKfycbzeHpG7knP3E5yZvLblWAY_NT-nwhs9FZLT7_4li9PVJGQAL45o1WEWCyt1krC1_Utd') >= 0) {
+        apiUrl = saved;
+      } else {
+        localStorage.setItem('lunch_api_url', DEFAULT_API_URL);
+        apiUrl = DEFAULT_API_URL;
+      }
+    } catch (e) { apiUrl = DEFAULT_API_URL; }
+
+    function isInAppBrowser() {
+      const ua = navigator.userAgent || '';
+      return /FBAN|FBAV|Instagram|Line\/|MicroMessenger|WhatsApp|FB_IAB|Twitter/i.test(ua);
+    }
     let selectedMeal = null;
     let localOrders = JSON.parse(localStorage.getItem('lunch_orders') || '[]');
     let pickupPerson = localStorage.getItem('lunch_pickup') || '';
@@ -487,7 +512,6 @@
     // ===================== 初始化 =====================
     document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('todayLabel').textContent = formatDateLabel(new Date());
-      // 有預設 API 就隱藏設定盒
       if (apiUrl) document.getElementById('configBox').classList.add('hidden');
       document.getElementById('apiUrlInput').value = apiUrl;
       document.getElementById('pickupPerson').textContent = pickupPerson || '未設定';
@@ -500,14 +524,21 @@
       buildSetupHelp();
       buildAiPrompt();
 
-      // 優先從 Google Sheet 載入菜單；失敗則試本機快取
+      if (isInAppBrowser()) {
+        showConnBar('⚠️ 你正在用 App 內置瀏覽器（WhatsApp/Facebook 等），可能連不到 Google。請用右上角 ⋯ 選擇「在瀏覽器開啟」。', 'warn');
+      }
+
       (async () => {
+        const ok = await testConnection();
         await loadMenus();
         populateDateSelects();
         renderMeals();
         loadOrders();
         loadDebts();
         generateExport();
+        if (!ok && !isInAppBrowser()) {
+          showConnBar('❌ 連不上 Google Sheet。可試「重新連線」，或改用 Safari / Chrome。', 'err');
+        }
       })();
     });
 
@@ -1467,42 +1498,156 @@
       });
     }
 
-    // ===================== API 呼叫（解決 CORS）=====================
-    // Google Apps Script 跨域會被 CORS 擋住。
-    // 寫入用 no-cors POST（不讀 response，樂觀更新本地）
-    // 讀取用 JSONP（doGet + callback）
+    // ===================== API 呼叫（手機相容）=====================
+    function showConnBar(msg, type) {
+      const bar = document.getElementById('connBar');
+      const el = document.getElementById('connMsg');
+      if (!bar || !el) return;
+      bar.style.display = 'flex';
+      el.textContent = msg;
+      if (type === 'err') { bar.style.background = '#fef2f2'; bar.style.border = '1px solid #fecaca'; bar.style.color = '#991b1b'; }
+      else if (type === 'warn') { bar.style.background = '#fffbeb'; bar.style.border = '1px solid #fcd34d'; bar.style.color = '#92400e'; }
+      else if (type === 'ok') { bar.style.background = '#f0fdf4'; bar.style.border = '1px solid #86efac'; bar.style.color = '#166534'; }
+      else { bar.style.background = '#f0ebe3'; bar.style.border = '1px solid #ddd'; bar.style.color = '#333'; }
+    }
+
+    function hideConnBar() {
+      const bar = document.getElementById('connBar');
+      if (bar) bar.style.display = 'none';
+    }
+
+    function openInBrowser() {
+      const url = location.href.split('#')[0];
+      toast('請用右上角選單「在瀏覽器開啟／Open in browser」');
+      // 嘗試跳出 WebView
+      try {
+        window.open(url, '_blank');
+      } catch (e) {}
+      // iOS
+      const a = document.createElement('a');
+      a.setAttribute('href', url);
+      a.setAttribute('target', '_blank');
+      a.setAttribute('rel', 'noopener');
+      a.click();
+    }
+
+    async function testConnection() {
+      if (!apiUrl) return false;
+      try {
+        await callApi('ping', {});
+        hideConnBar();
+        if (!isInAppBrowser()) {
+          // 短暫顯示成功
+          showConnBar('✅ 已連接 Google Sheet', 'ok');
+          setTimeout(hideConnBar, 2500);
+        }
+        return true;
+      } catch (e) {
+        console.warn('testConnection failed', e);
+        return false;
+      }
+    }
+
+    async function retryConnection() {
+      apiUrl = DEFAULT_API_URL;
+      try { localStorage.setItem('lunch_api_url', DEFAULT_API_URL); } catch (e) {}
+      document.getElementById('apiUrlInput').value = apiUrl;
+      showConnBar('正在重新連線…', '');
+      toast('重新連線中…');
+      const ok = await testConnection();
+      await loadMenus();
+      populateDateSelects();
+      renderMeals();
+      loadOrders();
+      loadDebts();
+      if (ok) {
+        showConnBar('✅ 已連接 Google Sheet', 'ok');
+        setTimeout(hideConnBar, 2500);
+        toast('連線成功');
+      } else {
+        showConnBar('❌ 仍然連不上。若用 WhatsApp 開啟，請改用 Safari / Chrome。', 'err');
+        toast('連線失敗');
+      }
+    }
+
+    /** 寫入：用 form + hidden iframe（比 no-cors fetch 更相容手機／WebView） */
+    function postViaIframe(payload) {
+      return new Promise((resolve) => {
+        const iframeName = 'gas_iframe_' + Date.now();
+        let iframe = document.getElementById('gasIframe');
+        if (!iframe) {
+          iframe = document.createElement('iframe');
+          iframe.id = 'gasIframe';
+          iframe.name = iframeName;
+          iframe.style.cssText = 'width:0;height:0;border:0;position:absolute;left:-9999px';
+          document.body.appendChild(iframe);
+        } else {
+          iframe.name = iframeName;
+        }
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = apiUrl;
+        form.target = iframeName;
+        form.style.display = 'none';
+        // Apps Script 對 text/plain body 較友善；form 用一個欄位裝 JSON
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'payload';
+        input.value = JSON.stringify(payload);
+        form.appendChild(input);
+        // 同時用 query 帶 action，方便 debug
+        document.body.appendChild(form);
+        try {
+          form.submit();
+        } catch (e) {
+          console.warn('form submit', e);
+        }
+        setTimeout(() => {
+          try { document.body.removeChild(form); } catch (e) {}
+          resolve({ ok: true });
+        }, 800);
+      });
+    }
+
     async function callApi(action, payload = {}) {
-      if (!apiUrl) throw new Error('未設定 API 網址');
+      if (!apiUrl) {
+        apiUrl = DEFAULT_API_URL;
+      }
 
       const writeActions = ['addOrder', 'markPaid', 'markAllPaid', 'deleteOrder', 'setSetting', 'importMenus'];
-      // getMenus / getOrders / getAllUnpaid → JSONP 讀取
 
       if (writeActions.includes(action)) {
-        // 寫入：no-cors，無法讀回傳，但資料會寫入 Sheet
+        const body = { action, ...payload };
+        // 雙通道：iframe form + no-cors fetch，提高手機成功率
+        try {
+          await postViaIframe(body);
+        } catch (e) { console.warn(e); }
         try {
           await fetch(apiUrl, {
             method: 'POST',
             mode: 'no-cors',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({ action, ...payload })
+            body: JSON.stringify(body),
+            cache: 'no-store'
           });
-          return { ok: true };
         } catch (e) {
-          throw new Error('寫入失敗：' + e.message);
+          console.warn('fetch write', e);
         }
+        return { ok: true };
       }
 
-      // 讀取：JSONP
+      // 讀取：JSONP（加 cache buster，避免手機快取）
       return new Promise((resolve, reject) => {
         const cbName = '_lunchCb_' + Date.now() + '_' + Math.floor(Math.random() * 9999);
+        const timeoutMs = action === 'ping' ? 10000 : 15000;
         const timeout = setTimeout(() => {
           cleanup();
-          reject(new Error('讀取逾時，請確認 Apps Script 已更新支援 doGet'));
-        }, 12000);
+          reject(new Error('連線逾時（手機若用 WhatsApp 內置瀏覽器請改用 Safari/Chrome）'));
+        }, timeoutMs);
 
         function cleanup() {
           clearTimeout(timeout);
-          delete window[cbName];
+          try { delete window[cbName]; } catch (e) { window[cbName] = undefined; }
           if (script && script.parentNode) script.parentNode.removeChild(script);
         }
 
@@ -1514,31 +1659,37 @@
 
         const script = document.createElement('script');
         const params = new URLSearchParams();
-        params.set('action', action);
+        params.set('action', action === 'ping' ? '' : action);
+        if (action === 'ping') {
+          // 空 action → doGet 回 status ok
+        } else {
+          params.set('action', action);
+        }
         params.set('callback', cbName);
-        // 把其餘參數也帶上（例如 date）
+        params.set('_t', String(Date.now())); // cache buster
         Object.keys(payload || {}).forEach(k => {
           if (payload[k] !== undefined && payload[k] !== null) {
             params.set(k, typeof payload[k] === 'object' ? JSON.stringify(payload[k]) : String(payload[k]));
           }
         });
-        script.src = apiUrl + (apiUrl.includes('?') ? '&' : '?') + params.toString();
-        script.onerror = () => {
+        script.src = apiUrl + (apiUrl.indexOf('?') >= 0 ? '&' : '?') + params.toString();
+        script.async = true;
+        script.onerror = function () {
           cleanup();
-          reject(new Error('JSONP 載入失敗'));
+          reject(new Error('無法載入 Google Script（可能被 App 內置瀏覽器攔截）'));
         };
         document.body.appendChild(script);
       });
     }
 
     function saveApiUrl() {
-      apiUrl = document.getElementById('apiUrlInput').value.trim();
+      let v = document.getElementById('apiUrlInput').value.trim();
+      if (!v) v = DEFAULT_API_URL;
+      apiUrl = v;
       localStorage.setItem('lunch_api_url', apiUrl);
-      if (apiUrl) {
-        document.getElementById('configBox').classList.add('hidden');
-        toast('API 網址已儲存');
-        loadOrders();
-      }
+      document.getElementById('configBox').classList.add('hidden');
+      toast('API 網址已儲存');
+      retryConnection();
     }
 
     function clearLocalCache() {
@@ -1591,7 +1742,22 @@ key | value
 ─── 複製開始 ───
 function doPost(e) {
   try {
-    var data = JSON.parse(e.postData.contents);
+    var data = {};
+    // 支援 JSON body 或 form 欄位 payload
+    if (e.postData && e.postData.contents) {
+      try {
+        data = JSON.parse(e.postData.contents);
+      } catch (err1) {
+        // form: payload=...
+        if (e.parameter && e.parameter.payload) {
+          data = JSON.parse(e.parameter.payload);
+        }
+      }
+    } else if (e.parameter && e.parameter.payload) {
+      data = JSON.parse(e.parameter.payload);
+    } else if (e.parameter) {
+      data = e.parameter;
+    }
     var result = handleAction(data.action, data);
     return ContentService.createTextOutput(JSON.stringify({ result: result }))
       .setMimeType(ContentService.MimeType.JSON);
