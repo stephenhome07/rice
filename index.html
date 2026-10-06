@@ -181,6 +181,7 @@
     <div class="tabs">
       <button class="tab active" data-tab="order">落單</button>
       <button class="tab" data-tab="orders">今日訂單</button>
+      <button class="tab" data-tab="overview">總覽</button>
       <button class="tab" data-tab="payment">欠款</button>
       <button class="tab" data-tab="export">匯出 WhatsApp</button>
       <button class="tab" data-tab="admin">管理</button>
@@ -306,6 +307,49 @@
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <!-- ========== 總覽 ========== -->
+    <div class="panel" id="panel-overview">
+      <div class="card">
+        <h2>訂單總覽</h2>
+        <div class="filter-bar">
+          <button class="btn btn-secondary" onclick="loadOverview()">重新整理</button>
+        </div>
+        <div class="status-bar" id="overviewStats"></div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>日子</th>
+                <th>份數</th>
+                <th>訂餐人</th>
+                <th>飯餐摘要</th>
+                <th>合計</th>
+                <th>拎飯人</th>
+              </tr>
+            </thead>
+            <tbody id="overviewBody">
+              <tr><td colspan="6" style="text-align:center;color:#999">載入中…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h2>設定拎飯人（按日子）</h2>
+        <div class="row">
+          <div>
+            <label>日子</label>
+            <select id="pickupDateSelect"></select>
+          </div>
+          <div>
+            <label>拎飯人（Initial 或名字）</label>
+            <input type="text" id="pickupByDate" placeholder="例如 CKH" />
+          </div>
+        </div>
+        <button class="btn btn-primary" style="margin-top:10px" onclick="savePickupByDate()">儲存此日拎飯人</button>
+        <p style="font-size:.8rem;color:var(--muted);margin-top:8px">亦可用頂部藍色列快速改「今日」拎飯人。</p>
       </div>
     </div>
 
@@ -482,6 +526,7 @@
           tab.classList.add('active');
           document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
           if (tab.dataset.tab === 'orders') loadOrders();
+          if (tab.dataset.tab === 'overview') loadOverview();
           if (tab.dataset.tab === 'payment') loadDebts();
           if (tab.dataset.tab === 'export') generateExport();
         });
@@ -566,17 +611,22 @@
       calcPrice();
     }
 
-    /** 從 Google Sheet 載入菜單；失敗則用本機快取 */
     async function loadMenus() {
       MENUS = {};
       SET_MENUS = [];
       let rows = null;
+      let errMsg = '';
       if (apiUrl) {
         try {
           rows = await callApi('getMenus');
+          if (!Array.isArray(rows)) {
+            errMsg = 'getMenus 回傳格式不正確';
+            rows = null;
+          }
         } catch (e) {
           console.warn('getMenus failed', e);
-          toast('無法從 Sheet 載入菜單，試用本機快取');
+          errMsg = e.message || String(e);
+          toast('無法從 Sheet 載入菜單：' + errMsg);
         }
       }
       if (!rows || !rows.length) {
@@ -587,11 +637,19 @@
       }
       if (!rows || !rows.length) {
         menusLoaded = false;
+        const box = document.getElementById('mealList');
+        if (box) {
+          box.innerHTML = '<p style="color:#b91c1c">未能載入菜單。<br>' +
+            (apiUrl
+              ? '請確認：① Apps Script 已用 v4 重新部署 ② 有 Menus 分頁 ③ 瀏覽器打開 API?action=getMenus 可看到資料<br>錯誤：' + (errMsg || '無資料')
+              : '請先設定 API 網址') + '</p>';
+        }
         return;
       }
       applyMenuRows(rows);
       localStorage.setItem('lunch_menus_cache', JSON.stringify(rows));
       menusLoaded = true;
+      console.log('Menus loaded:', Object.keys(MENUS).length, 'days,', SET_MENUS.length, 'sets');
     }
 
     function applyMenuRows(rows) {
@@ -617,14 +675,36 @@
     }
 
     function normalizeDate(s) {
+      if (s == null || s === '') return '';
+      // Google Sheets Date → 有時係 Date 物件序列化後嘅 ISO 字串
+      if (s instanceof Date || (typeof s === 'object' && s.getFullYear)) {
+        const d = new Date(s);
+        if (!isNaN(d.getTime())) {
+          // 用本地日期，避免 UTC 令日子少一日
+          const y = d.getFullYear();
+          const mo = String(d.getMonth() + 1).padStart(2, '0');
+          const da = String(d.getDate()).padStart(2, '0');
+          return y + '-' + mo + '-' + da;
+        }
+      }
       s = String(s).trim();
-      // 已是 YYYY-MM-DD
+      // ISO: 2026-10-02T00:00:00.000Z 或 2026-10-01T16:00:00.000Z
+      if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
+        // 以 Asia/Hong_Kong 理解：取 UTC+8 嘅曆日
+        const d = new Date(s);
+        if (!isNaN(d.getTime())) {
+          // 轉成 HKT 午夜對應嘅年月日
+          const hkt = new Date(d.getTime() + 8 * 3600 * 1000);
+          const y = hkt.getUTCFullYear();
+          const mo = String(hkt.getUTCMonth() + 1).padStart(2, '0');
+          const da = String(hkt.getUTCDate()).padStart(2, '0');
+          return y + '-' + mo + '-' + da;
+        }
+      }
       if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-      // YYYY/M/D
-      let m = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+      let m = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
       if (m) return m[1] + '-' + m[2].padStart(2,'0') + '-' + m[3].padStart(2,'0');
-      // D/M/YYYY or D/M/YY
-      m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+      m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
       if (m) {
         let y = m[3];
         if (y.length === 2) y = '20' + y;
@@ -884,7 +964,123 @@
       `;
     }
 
-    // ===================== 匯出 WhatsApp =====================
+
+    // ===================== 總覽 =====================
+    let pickupByDateMap = JSON.parse(localStorage.getItem('lunch_pickup_by_date') || '{}');
+
+    async function loadOverview() {
+      let orders = [];
+      if (apiUrl) {
+        try {
+          orders = (await callApi('getAllOrders') || []).map(normalizeOrder);
+          localOrders = orders.slice();
+          localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
+        } catch (e) {
+          orders = localOrders.slice();
+          toast('總覽改用本機資料：' + e.message);
+        }
+      } else {
+        orders = localOrders.slice();
+      }
+
+      // 按日子分組
+      const byDate = {};
+      orders.forEach(o => {
+        const d = normalizeDate(o.date) || o.date;
+        if (!byDate[d]) byDate[d] = [];
+        byDate[d].push(o);
+      });
+      const dates = Object.keys(byDate).sort();
+
+      // 填充拎飯人日子選單
+      const sel = document.getElementById('pickupDateSelect');
+      if (sel) {
+        const prev = sel.value;
+        sel.innerHTML = dates.map(d => {
+          try {
+            return '<option value="' + d + '">' + formatDateLabel(new Date(d + 'T12:00:00')) + '</option>';
+          } catch (e) {
+            return '<option value="' + d + '">' + d + '</option>';
+          }
+        }).join('');
+        if (dates.includes(prev)) sel.value = prev;
+        sel.onchange = function() {
+          document.getElementById('pickupByDate').value = pickupByDateMap[sel.value] || '';
+        };
+        if (dates.length) {
+          document.getElementById('pickupByDate').value = pickupByDateMap[sel.value] || '';
+        }
+      }
+
+      const tbody = document.getElementById('overviewBody');
+      const stats = document.getElementById('overviewStats');
+      if (!dates.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999">暫無訂單</td></tr>';
+        stats.innerHTML = '';
+        return;
+      }
+
+      let grandTotal = 0;
+      let grandCount = 0;
+      tbody.innerHTML = dates.map(d => {
+        const list = byDate[d];
+        const n = list.length;
+        grandCount += n;
+        const hasBulk = n >= BULK_THRESHOLD;
+        const sum = list.reduce((s, o) => s + getEffectiveTotal(o, n), 0);
+        grandTotal += sum;
+        const people = [...new Set(list.map(o => o.initial))].join(', ');
+        // 飯餐摘要
+        const mealMap = {};
+        list.forEach(o => {
+          const k = o.mealCode + '. ' + (o.mealName || '');
+          mealMap[k] = (mealMap[k] || 0) + 1;
+        });
+        const mealSummary = Object.entries(mealMap).map(([k,v]) => v + '×' + k).join('<br>');
+        let dateLabel = d;
+        try { dateLabel = formatDateLabel(new Date(d + 'T12:00:00')); } catch (e) {}
+        const pickup = pickupByDateMap[d] || '—';
+        return '<tr>' +
+          '<td><strong>' + dateLabel + '</strong></td>' +
+          '<td>' + n + (hasBulk ? ' <span class="badge badge-paid">滿5減</span>' : '') + '</td>' +
+          '<td style="font-size:.85rem">' + people + '</td>' +
+          '<td style="font-size:.8rem">' + mealSummary + '</td>' +
+          '<td>$' + sum + '</td>' +
+          '<td><strong>' + pickup + '</strong></td>' +
+          '</tr>';
+      }).join('');
+
+      stats.innerHTML =
+        '<div class="status-item">共 ' + dates.length + ' 日</div>' +
+        '<div class="status-item">' + grandCount + ' 份</div>' +
+        '<div class="status-item">合計 $' + grandTotal + '</div>';
+    }
+
+    async function savePickupByDate() {
+      const d = document.getElementById('pickupDateSelect').value;
+      const person = document.getElementById('pickupByDate').value.trim();
+      if (!d) { toast('請選擇日子'); return; }
+      pickupByDateMap[d] = person;
+      localStorage.setItem('lunch_pickup_by_date', JSON.stringify(pickupByDateMap));
+      // 同步到 Sheet（key = pickup_YYYY-MM-DD）
+      if (apiUrl) {
+        try {
+          await callApi('setSetting', { key: 'pickup_' + d, value: person });
+        } catch (e) { console.warn(e); }
+      }
+      // 若係今日，更新頂部
+      const today = toDateKey(new Date());
+      if (d === today) {
+        pickupPerson = person;
+        localStorage.setItem('lunch_pickup', person);
+        document.getElementById('pickupPerson').textContent = person || '未設定';
+        document.getElementById('adminPickup').value = person;
+      }
+      toast('已儲存 ' + d + ' 拎飯人：' + (person || '（清空）'));
+      loadOverview();
+    }
+
+        // ===================== 匯出 WhatsApp =====================
     function getEffectiveTotal(order, dayCount) {
       // dayCount = 當日總份數；滿5份則每飯減 $2
       let t = (order.mealPrice || 0) + (order.takeawayFee != null ? order.takeawayFee : TAKEAWAY_FEE) + (order.drinkPrice || 0);
@@ -971,7 +1167,13 @@
       pickupPerson = document.getElementById('adminPickup').value.trim();
       localStorage.setItem('lunch_pickup', pickupPerson);
       document.getElementById('pickupPerson').textContent = pickupPerson || '未設定';
-      if (apiUrl) callApi('setSetting', { key: 'pickup', value: pickupPerson }).catch(()=>{});
+      const today = toDateKey(new Date());
+      pickupByDateMap[today] = pickupPerson;
+      localStorage.setItem('lunch_pickup_by_date', JSON.stringify(pickupByDateMap));
+      if (apiUrl) {
+        callApi('setSetting', { key: 'pickup', value: pickupPerson }).catch(()=>{});
+        callApi('setSetting', { key: 'pickup_' + today, value: pickupPerson }).catch(()=>{});
+      }
       toast('已儲存');
     }
 
@@ -1151,29 +1353,23 @@
 
     // ===================== Apps Script 說明 =====================
     const SETUP_TEXT = `
-【重要】請用下方最新 Apps Script 重新部署
+【重要】請用下方最新 Apps Script 重新部署（v4：修正日期格式 + Setting 分頁名）
 
-1. 建立 Google Sheet「六記訂飯」，共 3 個工作表：
+1. Sheet 需要 3 個分頁：
 
-【Orders】第一列標題：
+【Orders】標題列：
 id | timestamp | initial | name | date | mealCode | mealName | mealPrice | takeawayFee | drink | drinkPrice | total | paid | note
+（若未有 takeawayFee 欄亦可，系統會兼容）
 
-【Menus】第一列標題（菜單由此讀取）：
+【Menus】標題列：
 date | code | name | price
+※ 日期欄請設為「純文字」或保持日期，Script 會轉成 YYYY-MM-DD
+※ 固定套餐：date 填 *
 
-  例子：
-  2025-10-28 | A | 日式咖喱牛腩 | 52
-  2025-10-28 | B | 豆角腩片燒茄子飯 | 50
-  *          | SET1 | 酸辣米線套餐（選一） | 48
-  *          | SET2 | 快餐 | 48
-
-  ※ 固定套餐：date 欄填 * 或 FIXED 或 每天（會顯示在每日的「固定套餐」區）
-  ※ 一般每日飯：date 填 YYYY-MM-DD（例如 2025-10-28）
-
-【Settings】第一列：
+【Setting】或【Settings】標題列：
 key | value
 
-2. Apps Script 全文（刪舊貼新）：
+2. Apps Script 全文：
 
 ─── 複製開始 ───
 function doPost(e) {
@@ -1195,7 +1391,7 @@ function doGet(e) {
   var result, out;
   try {
     if (!action) {
-      out = JSON.stringify({ status: 'ok', msg: '六記訂飯 API v3' });
+      out = JSON.stringify({ status: 'ok', msg: '六記訂飯 API v4' });
     } else {
       result = handleAction(action, p);
       out = JSON.stringify({ result: result });
@@ -1211,19 +1407,45 @@ function doGet(e) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+/** 統一把 Sheet 日期轉成 YYYY-MM-DD（香港時區） */
+function fmtDate_(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime())) {
+    return Utilities.formatDate(v, 'Asia/Hong_Kong', 'yyyy-MM-dd');
+  }
+  var s = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+  return s;
+}
+
+function getSettingsSheet_(ss) {
+  return ss.getSheetByName('Settings') || ss.getSheetByName('Setting');
+}
+
 function handleAction(action, data) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var result = null;
 
   if (action === 'addOrder') {
     var sheet = ss.getSheetByName('Orders');
-    sheet.appendRow([
-      data.id, data.timestamp, data.initial, data.name || '',
-      data.date, data.mealCode, data.mealName, data.mealPrice || 0,
-      data.takeawayFee != null ? data.takeawayFee : 1,
-      data.drink || '', data.drinkPrice || 0, data.total,
-      data.paid ? 'TRUE' : 'FALSE', data.note || ''
-    ]);
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var hasTakeaway = headers.indexOf('takeawayFee') >= 0;
+    if (hasTakeaway) {
+      sheet.appendRow([
+        data.id, data.timestamp, data.initial, data.name || '',
+        data.date, data.mealCode, data.mealName, data.mealPrice || 0,
+        data.takeawayFee != null ? data.takeawayFee : 1,
+        data.drink || '', data.drinkPrice || 0, data.total,
+        data.paid ? 'TRUE' : 'FALSE', data.note || ''
+      ]);
+    } else {
+      sheet.appendRow([
+        data.id, data.timestamp, data.initial, data.name || '',
+        data.date, data.mealCode, data.mealName, data.mealPrice || 0,
+        data.drink || '', data.drinkPrice || 0, data.total,
+        data.paid ? 'TRUE' : 'FALSE', data.note || ''
+      ]);
+    }
     result = { ok: true };
   }
   else if (action === 'getOrders') {
@@ -1234,15 +1456,22 @@ function handleAction(action, data) {
   else if (action === 'getAllUnpaid') {
     result = readOrders_(ss).filter(function(o) { return !o.paid; });
   }
+  else if (action === 'getAllOrders') {
+    result = readOrders_(ss);
+  }
   else if (action === 'getMenus') {
     var sheet = ss.getSheetByName('Menus');
-    if (!sheet) throw new Error('找不到 Menus 工作表');
+    if (!sheet) throw new Error('找不到 Menus 工作表，請建立並設標題：date | code | name | price');
     var rows = sheet.getDataRange().getValues();
     if (rows.length < 2) return [];
     var headers = rows[0].map(function(h) { return String(h).trim(); });
     result = rows.slice(1).map(function(r) {
       var o = {};
       headers.forEach(function(h, i) { o[h] = r[i]; });
+      o.date = fmtDate_(o.date);
+      o.code = o.code != null ? String(o.code).trim() : '';
+      o.name = o.name != null ? String(o.name).trim() : '';
+      o.price = Number(o.price);
       return o;
     }).filter(function(o) { return o.code || o.name; });
   }
@@ -1271,11 +1500,15 @@ function handleAction(action, data) {
     result = { ok: true };
   }
   else if (action === 'setSetting') {
-    var sheet = ss.getSheetByName('Settings');
+    var sheet = getSettingsSheet_(ss);
+    if (!sheet) {
+      sheet = ss.insertSheet('Setting');
+      sheet.appendRow(['key', 'value']);
+    }
     var rows = sheet.getDataRange().getValues();
     var found = false;
     for (var i = 1; i < rows.length; i++) {
-      if (rows[i][0] === data.key) {
+      if (String(rows[i][0]) === String(data.key)) {
         sheet.getRange(i + 1, 2).setValue(data.value);
         found = true;
         break;
@@ -1284,8 +1517,16 @@ function handleAction(action, data) {
     if (!found) sheet.appendRow([data.key, data.value]);
     result = { ok: true };
   }
+  else if (action === 'getSetting') {
+    var sheet = getSettingsSheet_(ss);
+    if (!sheet) return '';
+    var rows = sheet.getDataRange().getValues();
+    for (var i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]) === String(data.key)) return rows[i][1];
+    }
+    result = '';
+  }
   else if (action === 'importMenus') {
-    // data.items = [{date,code,name,price}, ...]
     var items = data.items;
     if (typeof items === 'string') {
       try { items = JSON.parse(items); } catch (e) { items = []; }
@@ -1312,31 +1553,28 @@ function handleAction(action, data) {
 
 function readOrders_(ss) {
   var sheet = ss.getSheetByName('Orders');
+  if (!sheet) return [];
   var rows = sheet.getDataRange().getValues();
   if (rows.length < 2) return [];
   var headers = rows[0];
   return rows.slice(1).map(function(r) {
     var o = {};
     headers.forEach(function(h, i) { o[h] = r[i]; });
+    o.date = fmtDate_(o.date);
     o.paid = o.paid === true || o.paid === 'TRUE' || o.paid === 'true';
+    o.total = Number(o.total) || 0;
+    o.mealPrice = Number(o.mealPrice) || 0;
+    o.drinkPrice = Number(o.drinkPrice) || 0;
     return o;
   });
 }
 ─── 複製結束 ───
 
-3. 部署：管理部署作業 → 編輯 → 新版本 → 部署（執行身分：我；任何人）
+3. 部署：管理部署作業 → 編輯 → 新版本 → 部署
 
-4. 價錢規則
-- 飲品免費；凍飲另加 $2
-- 每單外賣 +$1
-- 當日滿 5 份，每飯 −$2
-
-5. 固定套餐輸入方法
-在 Menus 工作表新增列，date 填 * ，例如：
-* | SET1 | 酸辣米線套餐（特級墨魚王/牛丸…） | 48
-* | SET5 | 快餐（雞扒/豬扒/魚柳…） | 48
-
-每日 A–G 則填實際日期 2025-10-28 | A | 菜名 | 52
+4. 測試：瀏覽器打開
+你的API網址?action=getMenus
+應該見到 JSON 有 result 陣列，date 為 2026-10-02 這種字串
 `;
   </script>
 </body>
