@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>六記 · 同事訂飯系統</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #c41e3a;
+      --primary-dark: #9a1830;
+      --bg: #f7f5f2;
+      --card: #ffffff;
+      --text: #1a1a1a;
+      --muted: #666;
+      --border: #e5e0d8;
+      --success: #0d7a4f;
+      --warning: #b45309;
+      --danger: #b91c1c;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Noto Sans TC', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    .container { max-width: 960px; margin: 0 auto; padding: 16px; }
+    header {
+      background: var(--primary);
+      color: white;
+      padding: 16px 0;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.12);
+    }
+    header .container { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+    header h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: .05em; }
+    header .meta { font-size: .85rem; opacity: .9; }
+    .tabs {
+      display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap;
+      background: var(--card); border-radius: 10px; padding: 6px;
+      border: 1px solid var(--border);
+    }
+    .tab {
+      flex: 1; min-width: 90px; padding: 10px 12px; border: none; background: transparent;
+      border-radius: 8px; font-weight: 500; cursor: pointer; font-size: .9rem;
+      color: var(--muted); transition: all .15s;
+    }
+    .tab.active { background: var(--primary); color: white; }
+    .tab:hover:not(.active) { background: #f0ebe3; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .card {
+      background: var(--card); border-radius: 12px; border: 1px solid var(--border);
+      padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.04);
+    }
+    .card h2 { font-size: 1.05rem; margin-bottom: 12px; color: var(--primary); }
+    label { display: block; font-size: .85rem; font-weight: 500; margin-bottom: 4px; color: var(--muted); }
+    select, input[type="text"], input[type="number"], textarea {
+      width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
+      font-size: 1rem; font-family: inherit; background: #fff;
+    }
+    select:focus, input:focus, textarea:focus { outline: 2px solid var(--primary); border-color: transparent; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 600px) { .row { grid-template-columns: 1fr; } }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 10px 18px; border: none; border-radius: 8px; font-weight: 600;
+      font-size: .95rem; cursor: pointer; font-family: inherit; transition: all .15s;
+    }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-secondary { background: #eee; color: var(--text); }
+    .btn-secondary:hover { background: #e0e0e0; }
+    .btn-success { background: var(--success); color: white; }
+    .btn-danger { background: var(--danger); color: white; }
+    .btn-block { width: 100%; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .meal-grid { display: grid; gap: 8px; }
+    .meal-item {
+      display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+      border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+      transition: all .15s; background: #fff;
+    }
+    .meal-item:hover { border-color: var(--primary); background: #fff8f8; }
+    .meal-item.selected { border-color: var(--primary); background: #fef2f2; box-shadow: 0 0 0 2px rgba(196,30,58,.2); }
+    .meal-item input { accent-color: var(--primary); width: 18px; height: 18px; flex-shrink: 0; }
+    .meal-code { font-weight: 700; color: var(--primary); min-width: 24px; }
+    .meal-name { flex: 1; font-size: .95rem; }
+    .meal-price { font-weight: 600; color: var(--text); white-space: nowrap; }
+    .set-box {
+      border: 1px dashed var(--primary); border-radius: 10px; padding: 12px; margin-top: 12px;
+      background: #fffafa;
+    }
+    .set-box h3 { color: var(--primary); font-size: .95rem; margin-bottom: 8px; }
+    .summary-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #f0f0f0; }
+    .summary-row.total { font-weight: 700; font-size: 1.15rem; border-bottom: none; margin-top: 8px; color: var(--primary); }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .75rem; font-weight: 600;
+    }
+    .badge-paid { background: #d1fae5; color: #065f46; }
+    .badge-unpaid { background: #fee2e2; color: #991b1b; }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+    th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+    th { background: #faf8f5; font-weight: 600; color: var(--muted); font-size: .8rem; }
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px);
+      background: #1a1a1a; color: white; padding: 12px 24px; border-radius: 10px;
+      font-size: .9rem; opacity: 0; transition: all .3s; z-index: 999; max-width: 90%;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+    .status-bar {
+      display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; font-size: .85rem;
+    }
+    .status-item { background: #f0ebe3; padding: 6px 12px; border-radius: 8px; }
+    .config-box {
+      background: #fffbeb; border: 1px solid #fcd34d; border-radius: 10px; padding: 14px; margin-bottom: 16px;
+      font-size: .85rem;
+    }
+    .config-box code { background: #fef3c7; padding: 2px 6px; border-radius: 4px; font-size: .8rem; }
+    .hidden { display: none !important; }
+    .drink-opts { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 8px; }
+    @media (max-width: 500px) { .drink-opts { grid-template-columns: 1fr; } }
+    .export-box {
+      background: #f0fdf4; border: 1px solid #86efac; border-radius: 10px; padding: 14px; margin-top: 12px;
+    }
+    .export-box textarea {
+      min-height: 140px; font-size: .85rem; margin: 8px 0; background: #fff;
+    }
+    .pickup-bar {
+      background: linear-gradient(135deg, #1e3a5f, #2d5a87); color: white;
+      padding: 12px 16px; border-radius: 10px; margin-bottom: 16px;
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+    }
+    .pickup-bar strong { font-size: 1.05rem; }
+    .loading { text-align: center; padding: 40px; color: var(--muted); }
+    .spinner {
+      width: 32px; height: 32px; border: 3px solid #eee; border-top-color: var(--primary);
+      border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .filter-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+    .filter-bar select { width: auto; min-width: 120px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <div>
+        <h1>六記 · 同事訂飯</h1>
+        <div class="meta">電話 24362000 · WhatsApp 5501 8351 / 5501 8108</div>
+      </div>
+      <div class="meta" id="todayLabel"></div>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- 設定提示（首次使用） -->
+    <div class="config-box" id="configBox">
+      <strong>⚙️ 首次設定</strong><br>
+      1. 建立 Google Sheet，複製下方 Apps Script 程式碼並部署為 Web App<br>
+      2. 把 Web App 網址貼到下方，按「儲存」<br>
+      <input type="text" id="apiUrlInput" placeholder="https://script.google.com/macros/s/xxxxx/exec" style="margin:8px 0">
+      <button class="btn btn-primary" onclick="saveApiUrl()">儲存 API 網址</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('configBox').classList.add('hidden')">暫時略過（本地模式）</button>
+      <div style="margin-top:10px">
+        <button class="btn btn-secondary" onclick="toggleSetupHelp()">顯示 / 隱藏完整設定說明</button>
+      </div>
+      <div id="setupHelp" class="hidden" style="margin-top:12px; white-space:pre-wrap; font-size:.8rem; background:#fff; padding:12px; border-radius:8px; max-height:400px; overflow:auto;"></div>
+    </div>
+
+    <!-- 拎飯人 -->
+    <div class="pickup-bar" id="pickupBar">
+      <div>📦 今日拎飯：<strong id="pickupPerson">未設定</strong></div>
+      <button class="btn btn-secondary" style="padding:6px 12px;font-size:.85rem" onclick="editPickup()">更改</button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" data-tab="order">落單</button>
+      <button class="tab" data-tab="orders">今日訂單</button>
+      <button class="tab" data-tab="payment">欠款</button>
+      <button class="tab" data-tab="export">匯出 WhatsApp</button>
+      <button class="tab" data-tab="admin">管理</button>
+    </div>
+
+    <!-- ========== 落單 ========== -->
+    <div class="panel active" id="panel-order">
+      <div class="card">
+        <h2>1. 你的 Initial</h2>
+        <div class="row">
+          <div>
+            <label>選擇或輸入 Initial</label>
+            <input list="initialList" id="userInitial" placeholder="例如 CKH" autocomplete="off" />
+            <datalist id="initialList"></datalist>
+          </div>
+          <div>
+            <label>顯示名稱（可選）</label>
+            <input type="text" id="userName" placeholder="例如 陳大文" />
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>2. 選擇日子</h2>
+        <label>訂哪一日的飯？</label>
+        <select id="orderDate"></select>
+      </div>
+
+      <div class="card">
+        <h2>3. 選擇飯餐</h2>
+        <div id="mealList" class="meal-grid">
+          <div class="loading"><div class="spinner"></div>載入菜單中…</div>
+        </div>
+        <div id="setOptions"></div>
+      </div>
+
+      <div class="card">
+        <h2>4. 飲品（可選）</h2>
+        <label>飲品</label>
+        <select id="drinkSelect">
+          <option value="">— 唔要飲品 —</option>
+          <option value="凍檸茶">凍檸茶 $15</option>
+          <option value="凍奶茶">凍奶茶 $15</option>
+          <option value="凍咖啡">凍咖啡 $16</option>
+          <option value="凍鴛鴦">凍鴛鴦 $16</option>
+          <option value="凍柠檬可乐">凍柠檬可樂 $14</option>
+          <option value="熱奶茶">熱奶茶 $13</option>
+          <option value="熱咖啡">熱咖啡 $14</option>
+          <option value="熱鴛鴦">熱鴛鴦 $14</option>
+          <option value="熱水">熱水 $5</option>
+          <option value="其他">其他（備註寫明）</option>
+        </select>
+        <div class="drink-opts" id="drinkOpts" style="display:none">
+          <div>
+            <label>冰量</label>
+            <select id="iceLevel">
+              <option value="正常">正常</option>
+              <option value="多冰">多冰</option>
+              <option value="少冰">少冰</option>
+              <option value="走冰">走冰</option>
+            </select>
+          </div>
+          <div>
+            <label>甜度</label>
+            <select id="sweetLevel">
+              <option value="正常">正常（全糖）</option>
+              <option value="少糖">少糖</option>
+              <option value="半糖">半糖</option>
+              <option value="微糖">微糖</option>
+              <option value="走糖">走糖</option>
+            </select>
+          </div>
+          <div>
+            <label>其他備註</label>
+            <input type="text" id="drinkNote" placeholder="例如 走茶漬" />
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>5. 確認價錢</h2>
+        <div id="priceSummary">
+          <div class="summary-row"><span>飯餐</span><span id="sumMeal">$0</span></div>
+          <div class="summary-row"><span>飲品</span><span id="sumDrink">$0</span></div>
+          <div class="summary-row total"><span>合計</span><span id="sumTotal">$0</span></div>
+        </div>
+        <label style="margin-top:12px">備註（可選）</label>
+        <input type="text" id="orderNote" placeholder="例如 少油 / 多飯" />
+        <button class="btn btn-primary btn-block" style="margin-top:14px" id="submitBtn" onclick="submitOrder()">
+          ✅ 確認落單
+        </button>
+      </div>
+    </div>
+
+    <!-- ========== 今日訂單 ========== -->
+    <div class="panel" id="panel-orders">
+      <div class="card">
+        <div class="filter-bar">
+          <label style="margin:0">篩選日子</label>
+          <select id="filterDate" onchange="loadOrders()"></select>
+          <button class="btn btn-secondary" onclick="loadOrders()">重新整理</button>
+        </div>
+        <div class="status-bar" id="orderStats"></div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Initial</th>
+                <th>飯餐</th>
+                <th>飲品</th>
+                <th>金額</th>
+                <th>已付</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="ordersBody">
+              <tr><td colspan="6" style="text-align:center;color:#999">載入中…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 欠款 ========== -->
+    <div class="panel" id="panel-payment">
+      <div class="card">
+        <h2>未付款名單</h2>
+        <div id="debtList">
+          <div class="loading"><div class="spinner"></div>載入中…</div>
+        </div>
+        <button class="btn btn-secondary" style="margin-top:12px" onclick="loadDebts()">重新整理</button>
+      </div>
+    </div>
+
+    <!-- ========== 匯出 WhatsApp ========== -->
+    <div class="panel" id="panel-export">
+      <div class="card">
+        <h2>一鍵產生 WhatsApp 落單訊息</h2>
+        <label>選擇要匯出的日子</label>
+        <select id="exportDate" onchange="generateExport()"></select>
+        <div class="export-box">
+          <div style="font-size:.85rem;color:#166534;margin-bottom:4px">預覽（可直接複製）</div>
+          <textarea id="exportText" readonly></textarea>
+          <button class="btn btn-success btn-block" onclick="copyExport()">📋 複製到剪貼簿</button>
+        </div>
+        <p style="font-size:.8rem;color:var(--muted);margin-top:10px">
+          預設備註：12:15-12:45 送到，可放可風中學門口，直行 5-10 步轉右走廊上的長枱（放外賣專用，電聯未必有人即時聽）
+        </p>
+      </div>
+    </div>
+
+    <!-- ========== 管理 ========== -->
+    <div class="panel" id="panel-admin">
+      <div class="card">
+        <h2>拎飯人</h2>
+        <div class="row">
+          <div>
+            <label>今日負責拎飯的人</label>
+            <input type="text" id="adminPickup" placeholder="例如 CKH / 阿明" />
+          </div>
+          <div style="display:flex;align-items:flex-end">
+            <button class="btn btn-primary" onclick="savePickup()">儲存</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>菜單匯入（下個月用）</h2>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">
+          用 AI 把新菜單圖片轉成 JSON，貼到下方，按「匯入」。
+        </p>
+        <textarea id="importJson" rows="8" placeholder='[{"date":"2025-11-03","code":"A","name":"清湯牛腩飯","price":52}, ...]'></textarea>
+        <button class="btn btn-primary" style="margin-top:8px" onclick="importMenus()">匯入菜單</button>
+        <button class="btn btn-secondary" style="margin-top:8px" onclick="showPrompt()">顯示 AI Prompt（複製用）</button>
+        <div id="promptBox" class="hidden" style="margin-top:12px">
+          <textarea id="aiPrompt" rows="16" readonly style="font-size:.8rem"></textarea>
+          <button class="btn btn-success btn-block" style="margin-top:8px" onclick="copyPrompt()">📋 複製 Prompt</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>系統</h2>
+        <button class="btn btn-secondary" onclick="document.getElementById('configBox').classList.remove('hidden')">重新設定 API 網址</button>
+        <button class="btn btn-secondary" onclick="clearLocalCache()">清除本機快取</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ===================== 預設菜單資料（2025年10月） =====================
+    const DEFAULT_MENUS = {
+      "2025-10-02": [
+        {code:"A",name:"清湯牛腩飯",price:52},{code:"B",name:"沙茶香茅豬扒飯",price:50},
+        {code:"C",name:"蝦醬豆卜豬頸肉",price:50},{code:"D",name:"菜脯蒸肉餅",price:48},
+        {code:"E",name:"日式咖喱吉列豬扒飯",price:50},{code:"F",name:"干炒雞絲公仔麵",price:50},
+        {code:"G",name:"茄汁炸脾紅腸飯",price:50}
+      ],
+      "2025-10-03": [
+        {code:"A",name:"勁蒜黑椒薯仔牛肉飯",price:50},{code:"B",name:"粟米班腩飯",price:50},
+        {code:"C",name:"麵醬豆卜蒸排骨",price:48},{code:"D",name:"梅香咸魚蒸肉餅",price:50},
+        {code:"E",name:"美極生炒牛肉飯",price:50},{code:"F",name:"味菜牛柳絲炒意",price:50},
+        {code:"G",name:"洋蔥汁豬扒腸飯",price:50}
+      ],
+      "2025-10-05": [
+        {code:"A",name:"咖喱牛腩飯",price:55},{code:"B",name:"麻婆豆腐飯",price:50},
+        {code:"C",name:"豉汁蒸倉魚飯",price:55},{code:"D",name:"土魷蒸肉餅",price:48},
+        {code:"E",name:"(兜亂)福建炒飯",price:50},{code:"F",name:"燒汁豬扒炒烏冬",price:50},
+        {code:"G",name:"黑椒豬扒火腿飯",price:48}
+      ],
+      "2025-10-06": [
+        {code:"A",name:"俄羅斯黑椒燉雞飯",price:50},{code:"B",name:"魚香茄子飯",price:50},
+        {code:"C",name:"豉汁鳳爪排骨",price:48},{code:"D",name:"咸蛋蒸肉餅",price:48},
+        {code:"E",name:"生炒雞絲飯",price:50},{code:"F",name:"干炒牛河",price:50},
+        {code:"G",name:"蒜蓉汁雞扒腸飯",price:50}
+      ],
+      "2025-10-07": [
+        {code:"A",name:"豆腐火腩飯",price:55},{code:"B",name:"千島咕嚕雞球飯",price:50},
+        {code:"C",name:"花菇魚肚蒸雞",price:48},{code:"D",name:"梅菜蒸肉餅",price:48},
+        {code:"E",name:"西炒飯",price:50},{code:"F",name:"金菇肉絲炆伊麵",price:50},
+        {code:"G",name:"茄汁雞扒餐肉飯",price:48}
+      ],
+      "2025-10-08": [
+        {code:"A",name:"醬燒牛腩飯",price:52},{code:"B",name:"日式咖喱雞球飯",price:50},
+        {code:"C",name:"紫菜肉碎魚皮餃湯飯",price:50},{code:"D",name:"馬蹄蒸肉餅",price:48},
+        {code:"E",name:"咖喱菠蘿海鮮炒飯",price:50},{code:"F",name:"干炒豬扒烏冬",price:50},
+        {code:"G",name:"白汁粟米豬扒火腿飯",price:50}
+      ],
+      "2025-10-09": [
+        {code:"A",name:"豉蒜涼瓜炆排骨飯",price:50},{code:"B",name:"葡汁雞皇飯",price:50},
+        {code:"C",name:"蒜蓉豆卜蒸排骨",price:48},{code:"D",name:"菜脯蒸肉餅",price:48},
+        {code:"E",name:"芝士黑椒牛肉炒飯",price:50},{code:"F",name:"干炒黑椒雞絲意",price:50},
+        {code:"G",name:"蒜蓉汁雞扒火腿飯",price:50}
+      ],
+      "2025-10-10": [
+        {code:"A",name:"冬瓜火腩飯",price:55},{code:"B",name:"紅燒豆腐飯",price:50},
+        {code:"C",name:"芥菜咸排骨湯飯",price:52},{code:"D",name:"梅香咸魚蒸肉餅",price:50},
+        {code:"E",name:"咸魚雞粒炒飯",price:50},{code:"F",name:"雪菜肉絲炆米",price:50},
+        {code:"G",name:"豉油豬扒餐肉飯",price:48}
+      ],
+      "2025-10-12": [
+        {code:"A",name:"咖喱薯仔雞飯",price:52},{code:"B",name:"椒鹽豬扒飯",price:50},
+        {code:"C",name:"剁椒蒸排骨",price:48},{code:"D",name:"土魷蒸肉餅",price:48},
+        {code:"E",name:"馬拉盞海鮮炒飯",price:50},{code:"F",name:"豉椒牛肉炒河",price:50},
+        {code:"G",name:"燒汁雞扒餐肉飯",price:50}
+      ],
+      "2025-10-13": [
+        {code:"A",name:"日式麵豉炆腩肉飯",price:50},{code:"B",name:"香菇肉醬扒豆腐飯",price:50},
+        {code:"C",name:"胡椒豬肚雞湯飯",price:52},{code:"D",name:"咸蛋蒸肉餅",price:48},
+        {code:"E",name:"夠薑麻油雞粒炒飯",price:50},{code:"F",name:"茄子肉絲炆米",price:50},
+        {code:"G",name:"洋蔥汁豬扒火腿飯",price:50}
+      ],
+      "2025-10-14": [
+        {code:"A",name:"南乳蓮藕豬手飯",price:50},{code:"B",name:"滑蛋牛肉飯",price:50},
+        {code:"C",name:"豉蒜醬香蒸排骨",price:48},{code:"D",name:"梅菜蒸肉餅",price:48},
+        {code:"E",name:"菜粒蛋白蝦仁炒飯",price:50},{code:"F",name:"鮮茄豬扒燴意粉",price:50},
+        {code:"G",name:"蔥油炸脾火腿飯",price:50}
+      ],
+      "2025-10-15": [
+        {code:"A",name:"豆角腩片燒茄子飯",price:50},{code:"B",name:"粟米肉粒飯",price:50},
+        {code:"C",name:"蝦醬豆卜豬頸肉",price:50},{code:"D",name:"馬蹄蒸肉餅",price:48},
+        {code:"E",name:"香蔥勁多餐肉炒飯",price:50},{code:"F",name:"星州炒米",price:50},
+        {code:"G",name:"蔥油雞扒餐肉飯",price:50}
+      ],
+      "2025-10-16": [
+        {code:"A",name:"黑椒蘑菇薯仔牛腩飯",price:52},{code:"B",name:"粟米火腿雞絲飯",price:50},
+        {code:"C",name:"麵醬豆卜蒸排骨",price:48},{code:"D",name:"菜脯蒸肉餅",price:48},
+        {code:"E",name:"蒜香黑椒牛肉炒飯",price:50},{code:"F",name:"干炒豬扒意粉",price:50},
+        {code:"G",name:"蒜蓉汁豬扒紅腸飯",price:50}
+      ],
+      "2025-10-17": [
+        {code:"A",name:"(豬)芝士免治肉醬飯",price:50},{code:"B",name:"菜遠牛肉飯",price:50},
+        {code:"C",name:"豉汁蒸倉魚飯",price:55},{code:"D",name:"梅香咸魚蒸肉餅",price:50},
+        {code:"E",name:"蝦米臘腸炒飯",price:50},{code:"F",name:"香辣蒜香大蜆炒意粉",price:50},
+        {code:"G",name:"洋蔥汁雞扒腸仔飯",price:50}
+      ],
+      "2025-10-20": [
+        {code:"A",name:"南乳涼瓜炆腩肉飯",price:50},{code:"B",name:"黑椒蘑菇雞皇飯",price:50},
+        {code:"C",name:"豉汁鳳爪排骨",price:48},{code:"D",name:"土魷蒸肉餅",price:48},
+        {code:"E",name:"菜脯雞粒炒飯",price:50},{code:"F",name:"干炒煙鴨胸意粉",price:50},
+        {code:"G",name:"蒜蓉汁豬扒紅腸飯",price:50}
+      ],
+      "2025-10-21": [
+        {code:"A",name:"鎮江豬手蛋飯",price:50},{code:"B",name:"照燒茄子雞扒飯",price:50},
+        {code:"C",name:"花菇魚肚蒸雞",price:48},{code:"D",name:"咸蛋蒸肉餅",price:48},
+        {code:"E",name:"黑椒芝士牛肉炒飯",price:50},{code:"F",name:"香辣蕃茄海鮮炒意粉",price:50},
+        {code:"G",name:"白汁粟米雞扒腿飯",price:50}
+      ],
+      "2025-10-22": [
+        {code:"A",name:"咖喱牛腩飯",price:55},{code:"B",name:"豚肉生薑燒",price:50},
+        {code:"C",name:"紫菜肉碎魚皮餃湯飯",price:50},{code:"D",name:"梅菜蒸肉餅",price:48},
+        {code:"E",name:"楊州炒飯",price:50},{code:"F",name:"豉椒排骨炒河",price:50},
+        {code:"G",name:"黑椒蘑菇豬扒腸飯",price:50}
+      ],
+      "2025-10-23": [
+        {code:"A",name:"梅菜腩肉飯",price:50},{code:"B",name:"千島咕嚕雞球飯",price:50},
+        {code:"C",name:"蒜蓉豆卜蒸排骨",price:48},{code:"D",name:"馬蹄蒸肉餅",price:48},
+        {code:"E",name:"薑粒菜甫炒飯",price:50},{code:"F",name:"瑞士汁干炒牛河",price:50},
+        {code:"G",name:"茄汁豬扒紅腸飯",price:48}
+      ],
+      "2025-10-24": [
+        {code:"A",name:"咖喱什菜豬扒飯",price:50},{code:"B",name:"粟米班腩飯",price:50},
+        {code:"C",name:"芥菜咸排骨湯飯",price:52},{code:"D",name:"菜脯蒸肉餅",price:48},
+        {code:"E",name:"鮑魚雞粒炒飯",price:50},{code:"F",name:"黑椒牛柳絲炒意",price:50},
+        {code:"G",name:"黑椒蘑菇雞扒腸飯",price:50}
+      ],
+      "2025-10-26": [
+        {code:"A",name:"清湯牛腩飯",price:52},{code:"B",name:"京都豬扒飯",price:50},
+        {code:"C",name:"剁椒蒸排骨",price:48},{code:"D",name:"梅香咸魚蒸肉餅",price:50},
+        {code:"E",name:"香蔥臘腸炒飯",price:50},{code:"F",name:"薑汁滑蛋牛肉炒河",price:50},
+        {code:"G",name:"蒜蓉汁豬扒腸飯",price:50}
+      ],
+      "2025-10-27": [
+        {code:"A",name:"勁蒜黑椒甘筍腩肉飯",price:50},{code:"B",name:"魚香茄子飯",price:50},
+        {code:"C",name:"胡椒豬肚雞湯飯",price:52},{code:"D",name:"土魷蒸肉餅",price:48},
+        {code:"E",name:"馬拉盞香辣炒飯",price:50},{code:"F",name:"椰菜肉絲炒烏冬",price:50},
+        {code:"G",name:"茄汁豬扒火腿飯",price:48}
+      ],
+      "2025-10-28": [
+        {code:"A",name:"日式咖喱牛腩",price:52},{code:"B",name:"豆角腩片燒茄子飯",price:50},
+        {code:"C",name:"豉蒜醬香蒸排骨",price:48},{code:"D",name:"咸蛋蒸肉餅",price:48},
+        {code:"E",name:"欖菜肉鬆季豆炒飯",price:50},{code:"F",name:"芝士肉醬意粉/飯",price:50},
+        {code:"G",name:"黑椒炸脾餐肉飯",price:50}
+      ],
+      "2025-10-29": [
+        {code:"A",name:"南乳蓮藕炆腩肉",price:50},{code:"B",name:"椒鹽雞翼飯",price:50},
+        {code:"C",name:"蝦醬豆卜豬頸肉",price:50},{code:"D",name:"梅菜蒸肉餅",price:48},
+        {code:"E",name:"福建炒飯",price:50},{code:"F",name:"干炒肉片河",price:50},
+        {code:"G",name:"蒜蓉汁雞扒腸飯",price:50}
+      ],
+      "2025-10-30": [
+        {code:"A",name:"鎮江腩肉飯",price:50},{code:"B",name:"豉椒班腩飯",price:50},
+        {code:"C",name:"麵醬豆卜蒸排骨",price:48},{code:"D",name:"馬蹄蒸肉餅",price:48},
+        {code:"E",name:"鮮茄西炒飯",price:50},{code:"F",name:"香辣蒜香鴨胸炒意粉",price:50},
+        {code:"G",name:"薑蓉豬扒紅腸飯",price:50}
+      ],
+      "2025-10-31": [
+        {code:"A",name:"豆腐火腩飯",price:55},{code:"B",name:"鮮茄燴牛肉飯",price:50},
+        {code:"C",name:"豉汁鳳爪排骨",price:48},{code:"D",name:"菜脯蒸肉餅",price:48},
+        {code:"E",name:"櫻花蝦菜甫蛋炒飯",price:50},{code:"F",name:"銀芽肉絲炆伊麵",price:50},
+        {code:"G",name:"洋蔥汁豬扒火腿飯",price:50}
+      ]
+    };
+
+    // 固定套餐（每日都有）
+    const SET_MENUS = [
+      {code:"SET1", name:"酸辣米線套餐（特級墨魚王/牛丸/雞扒/豬扒/雞亦 +$3轉生炸雞脾）", price:48},
+      {code:"SET2", name:"酸辣餃子米線套餐（鮮蝦雲吞/鳳城水餃/韭菜餃/椰菜餃 每款3只）", price:48},
+      {code:"SET3", name:"特級墨魚王湯河套餐（選一，雙拼+$8）", price:48},
+      {code:"SET4", name:"東北餃子米線套餐（選一，每款4只）", price:48},
+      {code:"SET5", name:"快餐（雞扒/豬扒/魚柳 + 火腿/腸/蛋/餐肉 + 跟飯/意粉）", price:48},
+      {code:"SET6", name:"午餐（雪菜肉絲麵 + 火腿奄列 + 牛油方包）", price:48},
+      {code:"SET7", name:"常餐（榨菜肉絲米 + 雞扒/豬扒/魚柳/雞亦 +$3轉生炸雞脾）", price:48}
+    ];
+
+    const DRINK_PRICES = {
+      "凍檸茶":15,"凍奶茶":15,"凍咖啡":16,"凍鴛鴦":16,"凍柠檬可乐":14,
+      "熱奶茶":13,"熱咖啡":14,"熱鴛鴦":14,"熱水":5,"其他":15
+    };
+
+    // ===================== 狀態 =====================
+    let apiUrl = localStorage.getItem('lunch_api_url') || '';
+    let selectedMeal = null;
+    let localOrders = JSON.parse(localStorage.getItem('lunch_orders') || '[]');
+    let pickupPerson = localStorage.getItem('lunch_pickup') || '';
+    let knownInitials = JSON.parse(localStorage.getItem('lunch_initials') || '[]');
+
+    // ===================== 初始化 =====================
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('todayLabel').textContent = formatDateLabel(new Date());
+      if (apiUrl) document.getElementById('configBox').classList.add('hidden');
+      document.getElementById('apiUrlInput').value = apiUrl;
+      document.getElementById('pickupPerson').textContent = pickupPerson || '未設定';
+      document.getElementById('adminPickup').value = pickupPerson;
+
+      populateDateSelects();
+      populateInitials();
+      renderMeals();
+      setupTabs();
+      setupDrinkToggle();
+      setupMealChange();
+      loadOrders();
+      loadDebts();
+      generateExport();
+      buildSetupHelp();
+      buildAiPrompt();
+    });
+
+    function formatDateLabel(d) {
+      const days = ['日','一','二','三','四','五','六'];
+      return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}（${days[d.getDay()]}）`;
+    }
+
+    function toDateKey(d) {
+      return d.toISOString().slice(0,10);
+    }
+
+    function populateDateSelects() {
+      const dates = Object.keys(DEFAULT_MENUS).sort();
+      const selects = ['orderDate','filterDate','exportDate'];
+      selects.forEach(id => {
+        const sel = document.getElementById(id);
+        sel.innerHTML = '';
+        dates.forEach(dk => {
+          const d = new Date(dk + 'T12:00:00');
+          const opt = document.createElement('option');
+          opt.value = dk;
+          opt.textContent = formatDateLabel(d);
+          sel.appendChild(opt);
+        });
+        // 預設今日或最接近的日子
+        const today = toDateKey(new Date());
+        if (dates.includes(today)) sel.value = today;
+        else {
+          const future = dates.find(d => d >= today);
+          sel.value = future || dates[dates.length-1];
+        }
+      });
+      document.getElementById('orderDate').addEventListener('change', renderMeals);
+    }
+
+    function populateInitials() {
+      const list = document.getElementById('initialList');
+      list.innerHTML = '';
+      knownInitials.forEach(i => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        list.appendChild(opt);
+      });
+    }
+
+    function setupTabs() {
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+          document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+          tab.classList.add('active');
+          document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+          if (tab.dataset.tab === 'orders') loadOrders();
+          if (tab.dataset.tab === 'payment') loadDebts();
+          if (tab.dataset.tab === 'export') generateExport();
+        });
+      });
+    }
+
+    function setupDrinkToggle() {
+      document.getElementById('drinkSelect').addEventListener('change', () => {
+        const v = document.getElementById('drinkSelect').value;
+        document.getElementById('drinkOpts').style.display = v ? 'grid' : 'none';
+        calcPrice();
+      });
+      document.getElementById('iceLevel').addEventListener('change', calcPrice);
+      document.getElementById('sweetLevel').addEventListener('change', calcPrice);
+    }
+
+    function setupMealChange() {
+      // handled in renderMeals
+    }
+
+    // ===================== 菜單渲染 =====================
+    function renderMeals() {
+      const date = document.getElementById('orderDate').value;
+      const meals = DEFAULT_MENUS[date] || [];
+      const container = document.getElementById('mealList');
+      if (!meals.length) {
+        container.innerHTML = '<p style="color:#999">此日無菜單資料</p>';
+        return;
+      }
+      container.innerHTML = meals.map(m => `
+        <label class="meal-item" data-code="${m.code}" data-name="${m.name}" data-price="${m.price}">
+          <input type="radio" name="meal" value="${m.code}" />
+          <span class="meal-code">${m.code}.</span>
+          <span class="meal-name">${m.name}</span>
+          <span class="meal-price">$${m.price}</span>
+        </label>
+      `).join('');
+
+      // 套餐
+      const setBox = document.getElementById('setOptions');
+      setBox.innerHTML = `
+        <div class="set-box">
+          <h3>固定套餐（每日供應）</h3>
+          <div class="meal-grid">
+            ${SET_MENUS.map(m => `
+              <label class="meal-item" data-code="${m.code}" data-name="${m.name}" data-price="${m.price}">
+                <input type="radio" name="meal" value="${m.code}" />
+                <span class="meal-code">套</span>
+                <span class="meal-name">${m.name}</span>
+                <span class="meal-price">$${m.price}</span>
+              </label>
+            `).join('')}
+          </div>
+        </div>
+      `;
+
+      document.querySelectorAll('.meal-item input').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+          document.querySelectorAll('.meal-item').forEach(el => el.classList.remove('selected'));
+          e.target.closest('.meal-item').classList.add('selected');
+          const item = e.target.closest('.meal-item');
+          selectedMeal = {
+            code: item.dataset.code,
+            name: item.dataset.name,
+            price: parseInt(item.dataset.price)
+          };
+          calcPrice();
+        });
+      });
+      selectedMeal = null;
+      calcPrice();
+    }
+
+    function calcPrice() {
+      const mealP = selectedMeal ? selectedMeal.price : 0;
+      const drink = document.getElementById('drinkSelect').value;
+      const drinkP = drink ? (DRINK_PRICES[drink] || 15) : 0;
+      document.getElementById('sumMeal').textContent = '$' + mealP;
+      document.getElementById('sumDrink').textContent = '$' + drinkP;
+      document.getElementById('sumTotal').textContent = '$' + (mealP + drinkP);
+    }
+
+    // ===================== 落單 =====================
+    async function submitOrder() {
+      const initial = document.getElementById('userInitial').value.trim().toUpperCase();
+      if (!initial) { toast('請輸入 Initial'); return; }
+      if (!selectedMeal) { toast('請選擇飯餐'); return; }
+
+      const drink = document.getElementById('drinkSelect').value;
+      const ice = document.getElementById('iceLevel').value;
+      const sweet = document.getElementById('sweetLevel').value;
+      const drinkNote = document.getElementById('drinkNote').value.trim();
+      const note = document.getElementById('orderNote').value.trim();
+      const date = document.getElementById('orderDate').value;
+      const name = document.getElementById('userName').value.trim();
+      const mealP = selectedMeal.price;
+      const drinkP = drink ? (DRINK_PRICES[drink] || 15) : 0;
+      const total = mealP + drinkP;
+
+      let drinkStr = '';
+      if (drink) {
+        drinkStr = drink;
+        if (drink.startsWith('凍')) drinkStr += `（${ice}・${sweet}）`;
+        if (drinkNote) drinkStr += ` ${drinkNote}`;
+      }
+
+      const order = {
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+        timestamp: new Date().toISOString(),
+        initial,
+        name,
+        date,
+        mealCode: selectedMeal.code,
+        mealName: selectedMeal.name,
+        mealPrice: mealP,
+        drink: drinkStr,
+        drinkPrice: drinkP,
+        total,
+        paid: false,
+        note
+      };
+
+      // 記住 initial
+      if (!knownInitials.includes(initial)) {
+        knownInitials.push(initial);
+        localStorage.setItem('lunch_initials', JSON.stringify(knownInitials));
+        populateInitials();
+      }
+
+      // 本地儲存
+      localOrders.push(order);
+      localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
+
+      // 如果有 API，同步到 Sheets
+      if (apiUrl) {
+        try {
+          await callApi('addOrder', order);
+          toast('✅ 已落單並同步到 Google Sheet');
+        } catch (e) {
+          toast('⚠️ 本地已儲存，但同步失敗：' + e.message);
+        }
+      } else {
+        toast('✅ 已落單（本地模式）');
+      }
+
+      // reset
+      document.querySelectorAll('.meal-item').forEach(el => el.classList.remove('selected'));
+      document.querySelectorAll('input[name="meal"]').forEach(r => r.checked = false);
+      selectedMeal = null;
+      document.getElementById('drinkSelect').value = '';
+      document.getElementById('drinkOpts').style.display = 'none';
+      document.getElementById('orderNote').value = '';
+      calcPrice();
+    }
+
+    // ===================== 訂單列表 =====================
+    async function loadOrders() {
+      const date = document.getElementById('filterDate').value;
+      let orders = [];
+      if (apiUrl) {
+        try {
+          orders = await callApi('getOrders', { date });
+        } catch (e) {
+          orders = localOrders.filter(o => o.date === date);
+          toast('無法連線，顯示本地資料');
+        }
+      } else {
+        orders = localOrders.filter(o => o.date === date);
+      }
+
+      const tbody = document.getElementById('ordersBody');
+      if (!orders.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999">此日暫無訂單</td></tr>';
+        document.getElementById('orderStats').innerHTML = '';
+        return;
+      }
+
+      const totalAmt = orders.reduce((s,o) => s + o.total, 0);
+      const unpaid = orders.filter(o => !o.paid).length;
+      document.getElementById('orderStats').innerHTML = `
+        <div class="status-item">共 ${orders.length} 份</div>
+        <div class="status-item">合計 $${totalAmt}</div>
+        <div class="status-item">${unpaid ? unpaid + ' 人未付' : '全部已付 ✅'}</div>
+      `;
+
+      tbody.innerHTML = orders.map(o => `
+        <tr>
+          <td><strong>${o.initial}</strong>${o.name ? '<br><small>'+o.name+'</small>' : ''}</td>
+          <td>${o.mealCode}. ${o.mealName}</td>
+          <td>${o.drink || '—'}</td>
+          <td>$${o.total}</td>
+          <td>
+            <span class="badge ${o.paid ? 'badge-paid' : 'badge-unpaid'}">${o.paid ? '已付' : '未付'}</span>
+          </td>
+          <td>
+            ${!o.paid ? `<button class="btn btn-success" style="padding:4px 10px;font-size:.8rem" onclick="markPaid('${o.id}')">標已付</button>` : ''}
+            <button class="btn btn-danger" style="padding:4px 10px;font-size:.8rem" onclick="deleteOrder('${o.id}')">刪</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function markPaid(id) {
+      if (apiUrl) {
+        try { await callApi('markPaid', { id }); } catch(e) { toast(e.message); }
+      }
+      localOrders = localOrders.map(o => o.id === id ? {...o, paid:true} : o);
+      localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
+      loadOrders();
+      loadDebts();
+      toast('已標記付款');
+    }
+
+    async function deleteOrder(id) {
+      if (!confirm('確定刪除此訂單？')) return;
+      if (apiUrl) {
+        try { await callApi('deleteOrder', { id }); } catch(e) { toast(e.message); }
+      }
+      localOrders = localOrders.filter(o => o.id !== id);
+      localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
+      loadOrders();
+      loadDebts();
+      toast('已刪除');
+    }
+
+    // ===================== 欠款 =====================
+    async function loadDebts() {
+      let orders = [];
+      if (apiUrl) {
+        try { orders = await callApi('getAllUnpaid'); }
+        catch(e) { orders = localOrders.filter(o => !o.paid); }
+      } else {
+        orders = localOrders.filter(o => !o.paid);
+      }
+
+      // 按 initial 汇总
+      const map = {};
+      orders.forEach(o => {
+        if (!map[o.initial]) map[o.initial] = { name: o.name, total: 0, count: 0, details: [] };
+        map[o.initial].total += o.total;
+        map[o.initial].count++;
+        map[o.initial].details.push(`${o.date} ${o.mealCode}.$${o.total}`);
+      });
+
+      const box = document.getElementById('debtList');
+      const keys = Object.keys(map).sort();
+      if (!keys.length) {
+        box.innerHTML = '<p style="color:var(--success);font-weight:600">🎉 目前無人欠款</p>';
+        return;
+      }
+      box.innerHTML = `
+        <table>
+          <thead><tr><th>Initial</th><th>次數</th><th>欠款</th><th>詳情</th></tr></thead>
+          <tbody>
+            ${keys.map(k => `
+              <tr>
+                <td><strong>${k}</strong>${map[k].name ? '<br><small>'+map[k].name+'</small>' : ''}</td>
+                <td>${map[k].count}</td>
+                <td style="color:var(--danger);font-weight:700">$${map[k].total}</td>
+                <td style="font-size:.8rem;color:#666">${map[k].details.join('<br>')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <p style="margin-top:10px;font-weight:600">總欠款：$${keys.reduce((s,k)=>s+map[k].total,0)}</p>
+      `;
+    }
+
+    // ===================== 匯出 WhatsApp =====================
+    function generateExport() {
+      const date = document.getElementById('exportDate').value;
+      const orders = localOrders.filter(o => o.date === date);
+      // 如果有 API 也可以拉，但為了即時，先用本地 + 提示
+      const d = new Date(date + 'T12:00:00');
+      let text = `【六記訂飯】${formatDateLabel(d)}\n`;
+      text += `電話：24362000 / WhatsApp 55018351\n`;
+      text += `────────────────\n`;
+
+      if (!orders.length) {
+        text += '（暫無訂單）\n';
+      } else {
+        // 按 meal 汇总数量
+        const mealCount = {};
+        orders.forEach(o => {
+          const key = `${o.mealCode}. ${o.mealName}`;
+          mealCount[key] = (mealCount[key] || 0) + 1;
+        });
+        Object.entries(mealCount).forEach(([k,v]) => {
+          text += `${v} × ${k}\n`;
+        });
+
+        // 饮品
+        const drinks = orders.filter(o => o.drink).map(o => o.drink);
+        if (drinks.length) {
+          text += `\n飲品：\n`;
+          drinks.forEach(d => text += `• ${d}\n`);
+        }
+
+        text += `\n共 ${orders.length} 份\n`;
+      }
+
+      text += `────────────────\n`;
+      text += `備註：12:15-12:45 送到\n`;
+      text += `可放可風中學門口，直行5-10步轉右走廊上的長枱（放外賣專用，電聯未必有人即時聽）\n`;
+      if (pickupPerson) text += `拎飯人：${pickupPerson}\n`;
+
+      document.getElementById('exportText').value = text;
+    }
+
+    function copyExport() {
+      const ta = document.getElementById('exportText');
+      ta.select();
+      navigator.clipboard.writeText(ta.value).then(() => toast('已複製！可直接貼到 WhatsApp')).catch(() => {
+        document.execCommand('copy');
+        toast('已複製');
+      });
+    }
+
+    // ===================== 拎飯人 =====================
+    function editPickup() {
+      const v = prompt('輸入今日負責拎飯的人（Initial 或名字）', pickupPerson);
+      if (v !== null) {
+        pickupPerson = v.trim();
+        localStorage.setItem('lunch_pickup', pickupPerson);
+        document.getElementById('pickupPerson').textContent = pickupPerson || '未設定';
+        document.getElementById('adminPickup').value = pickupPerson;
+        if (apiUrl) callApi('setSetting', { key: 'pickup', value: pickupPerson }).catch(()=>{});
+        toast('已更新拎飯人');
+      }
+    }
+
+    function savePickup() {
+      pickupPerson = document.getElementById('adminPickup').value.trim();
+      localStorage.setItem('lunch_pickup', pickupPerson);
+      document.getElementById('pickupPerson').textContent = pickupPerson || '未設定';
+      if (apiUrl) callApi('setSetting', { key: 'pickup', value: pickupPerson }).catch(()=>{});
+      toast('已儲存');
+    }
+
+    // ===================== 菜單匯入 =====================
+    function importMenus() {
+      const raw = document.getElementById('importJson').value.trim();
+      if (!raw) { toast('請貼上 JSON'); return; }
+      try {
+        const data = JSON.parse(raw);
+        if (!Array.isArray(data)) throw new Error('必須是陣列');
+        data.forEach(item => {
+          if (!item.date || !item.code || !item.name || item.price == null) throw new Error('缺少欄位');
+          if (!DEFAULT_MENUS[item.date]) DEFAULT_MENUS[item.date] = [];
+          // 替换或新增
+          const idx = DEFAULT_MENUS[item.date].findIndex(m => m.code === item.code);
+          if (idx >= 0) DEFAULT_MENUS[item.date][idx] = item;
+          else DEFAULT_MENUS[item.date].push(item);
+        });
+        // 保存到 local
+        localStorage.setItem('lunch_menus', JSON.stringify(DEFAULT_MENUS));
+        populateDateSelects();
+        renderMeals();
+        toast(`成功匯入 ${data.length} 項菜單`);
+        if (apiUrl) callApi('importMenus', data).catch(e => toast('Sheets 同步失敗：'+e.message));
+      } catch (e) {
+        toast('JSON 格式錯誤：' + e.message);
+      }
+    }
+
+    function showPrompt() {
+      document.getElementById('promptBox').classList.toggle('hidden');
+    }
+
+    function buildAiPrompt() {
+      const prompt = `你是一個菜單資料擷取助手。我會上傳「六記」茶餐廳的每日飯單圖片（通常是香港茶記風格，有日期如 28/10 (三)、A-G 選項、價錢）。
+
+請你嚴格按照以下 JSON 格式輸出，不要加任何解釋或 markdown 標記：
+
+[
+  {"date":"YYYY-MM-DD","code":"A","name":"菜名","price":52},
+  {"date":"YYYY-MM-DD","code":"B","name":"菜名","price":50},
+  ...
+]
+
+規則：
+1. date 必須轉成 ISO 格式 YYYY-MM-DD（年份請用圖片所屬年份，若不明則用當前年份）。
+2. code 保持 A、B、C、D、E、F、G。
+3. name 用繁體中文，盡量完整保留原名。
+4. price 只取數字（不要 $ 符號）。
+5. 如果同一日有多個 A-G，全部列出。
+6. 固定套餐（酸辣米線、快餐等）可省略，因為系統已內建。
+7. 如果圖片有多個日期，全部輸出在同一個陣列。
+8. 只輸出 JSON 陣列，不要其他文字。
+
+現在請處理我上傳的菜單圖片：`;
+      document.getElementById('aiPrompt').value = prompt;
+    }
+
+    function copyPrompt() {
+      const ta = document.getElementById('aiPrompt');
+      ta.select();
+      navigator.clipboard.writeText(ta.value).then(() => toast('Prompt 已複製')).catch(() => {
+        document.execCommand('copy');
+        toast('已複製');
+      });
+    }
+
+    // ===================== API 呼叫 =====================
+    async function callApi(action, payload = {}) {
+      if (!apiUrl) throw new Error('未設定 API 網址');
+      const res = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' }, // Apps Script 需要
+        body: JSON.stringify({ action, ...payload })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      return data.result;
+    }
+
+    function saveApiUrl() {
+      apiUrl = document.getElementById('apiUrlInput').value.trim();
+      localStorage.setItem('lunch_api_url', apiUrl);
+      if (apiUrl) {
+        document.getElementById('configBox').classList.add('hidden');
+        toast('API 網址已儲存');
+        loadOrders();
+      }
+    }
+
+    function clearLocalCache() {
+      if (!confirm('確定清除本機所有訂單與設定？')) return;
+      localStorage.removeItem('lunch_orders');
+      localStorage.removeItem('lunch_initials');
+      localStorage.removeItem('lunch_pickup');
+      localOrders = [];
+      knownInitials = [];
+      pickupPerson = '';
+      location.reload();
+    }
+
+    function toast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 2800);
+    }
+
+    function toggleSetupHelp() {
+      document.getElementById('setupHelp').classList.toggle('hidden');
+    }
+
+    function buildSetupHelp() {
+      document.getElementById('setupHelp').textContent = SETUP_TEXT;
+    }
+
+    // ===================== Apps Script 說明 =====================
+    const SETUP_TEXT = `
+【完整設定步驟】
+
+1. 建立 Google Sheet
+   - 開啟 https://sheets.google.com 新建試算表
+   - 命名為「六記訂飯」
+   - 建立以下工作表（分頁）：
+
+   【Orders】工作表（第一列標題）：
+   id | timestamp | initial | name | date | mealCode | mealName | mealPrice | drink | drinkPrice | total | paid | note
+
+   【Settings】工作表：
+   key | value
+   pickup | （空）
+
+2. 開啟 Apps Script
+   - 在 Sheet 選單：擴充功能 → Apps Script
+   - 刪除預設內容，貼上以下程式碼：
+
+─── 複製開始 ───
+function doPost(e) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const data = JSON.parse(e.postData.contents);
+  const action = data.action;
+  let result = null;
+
+  try {
+    if (action === 'addOrder') {
+      const sheet = ss.getSheetByName('Orders');
+      sheet.appendRow([
+        data.id, data.timestamp, data.initial, data.name || '',
+        data.date, data.mealCode, data.mealName, data.mealPrice,
+        data.drink || '', data.drinkPrice || 0, data.total,
+        data.paid ? 'TRUE' : 'FALSE', data.note || ''
+      ]);
+      result = { ok: true };
+    }
+    else if (action === 'getOrders') {
+      const sheet = ss.getSheetByName('Orders');
+      const rows = sheet.getDataRange().getValues();
+      const headers = rows[0];
+      result = rows.slice(1)
+        .map(r => {
+          const o = {};
+          headers.forEach((h,i) => o[h] = r[i]);
+          o.paid = o.paid === true || o.paid === 'TRUE';
+          return o;
+        })
+        .filter(o => !data.date || o.date === data.date);
+    }
+    else if (action === 'getAllUnpaid') {
+      const sheet = ss.getSheetByName('Orders');
+      const rows = sheet.getDataRange().getValues();
+      const headers = rows[0];
+      result = rows.slice(1)
+        .map(r => {
+          const o = {};
+          headers.forEach((h,i) => o[h] = r[i]);
+          o.paid = o.paid === true || o.paid === 'TRUE';
+          return o;
+        })
+        .filter(o => !o.paid);
+    }
+    else if (action === 'markPaid') {
+      const sheet = ss.getSheetByName('Orders');
+      const rows = sheet.getDataRange().getValues();
+      for (let i = 1; i < rows.length; i++) {
+        if (rows[i][0] === data.id) {
+          sheet.getRange(i+1, 12).setValue('TRUE');
+          break;
+        }
+      }
+      result = { ok: true };
+    }
+    else if (action === 'deleteOrder') {
+      const sheet = ss.getSheetByName('Orders');
+      const rows = sheet.getDataRange().getValues();
+      for (let i = 1; i < rows.length; i++) {
+        if (rows[i][0] === data.id) {
+          sheet.deleteRow(i+1);
+          break;
+        }
+      }
+      result = { ok: true };
+    }
+    else if (action === 'setSetting') {
+      const sheet = ss.getSheetByName('Settings');
+      const rows = sheet.getDataRange().getValues();
+      let found = false;
+      for (let i = 1; i < rows.length; i++) {
+        if (rows[i][0] === data.key) {
+          sheet.getRange(i+1, 2).setValue(data.value);
+          found = true;
+          break;
+        }
+      }
+      if (!found) sheet.appendRow([data.key, data.value]);
+      result = { ok: true };
+    }
+    else if (action === 'importMenus') {
+      // 可選：另外建 Menus 工作表儲存
+      result = { ok: true, count: data.length || 0 };
+    }
+    else {
+      result = { error: 'Unknown action' };
+    }
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  return ContentService.createTextOutput(JSON.stringify({ result }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doGet(e) {
+  return ContentService.createTextOutput(JSON.stringify({ status: 'ok', msg: '六記訂飯 API' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+─── 複製結束 ───
+
+3. 部署
+   - 按右上角「部署」→「新增部署作業」
+   - 類型選「網頁應用程式」
+   - 說明：lunch-order-v1
+   - 執行身分：我
+   - 具有存取權的使用者：任何人
+   - 按「部署」
+   - 授權（第一次會要求權限）
+   - 複製「網頁應用程式網址」
+   - 貼回本頁的 API 網址欄位
+
+4. 完成！之後所有同事用同一個 GitHub Pages 網址即可同時落單。
+
+注意：
+- 本地模式（不設 API）也能用，資料存在瀏覽器 localStorage，適合測試。
+- 正式多人使用務必設定 Google Sheet，否則各人資料互不相通。
+`;
+  </script>
+</body>
+</html>
