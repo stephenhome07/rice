@@ -285,6 +285,7 @@
           <option value="熱奶茶">熱奶茶（免費）</option>
           <option value="熱咖啡">熱咖啡（免費）</option>
           <option value="熱鴛鴦">熱鴛鴦（免費）</option>
+          <option value="熱檸茶">熱檸茶（免費）</option>
           <option value="熱水">熱水（免費）</option>
           <option value="其他">其他（免費，備註寫明）</option>
         </select>
@@ -430,7 +431,7 @@
           <button class="btn btn-success btn-block" onclick="copyExport()">📋 複製到剪貼簿</button>
         </div>
         <p style="font-size:.8rem;color:var(--muted);margin-top:10px">
-          預設備註：12:15-12:45 送到，可放可聯中學門口，直行 5-10 步轉右走廊上的長枱（放外賣專用，電聯未必有人即時聽）
+          預設備註：12:15-12:45 送到，可放可譽中學門口，直行 5-10 步轉右走廊上的長枱（放外賣專用，電聯未必有人即時聽）
         </p>
       </div>
     </div>
@@ -1532,7 +1533,7 @@
 
       text += `────────────────\n`;
       text += `備註：12:15-12:45 送到\n`;
-      text += `可放可聯中學門口，直行5-10步轉右走廊上的長枱（放外賣專用，電聯未必有人即時聽）\n`;
+      text += `放可譽中學門口，直行5-10步轉右走廊上的長枱（放外賣專用，電聯未必有人即時聽）\n`;
       // 拎飯人：優先當日設定
       const dayPickup = (typeof pickupByDateMap !== 'undefined' && pickupByDateMap[date]) || pickupPerson;
       if (dayPickup) text += `拎飯人：${dayPickup}\n`;
