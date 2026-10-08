@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
-  <title>HOYU PANDA V1.03</title>
+  <title>HO YU PANDA V1.04</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
@@ -411,11 +411,48 @@
     <!-- ========== 欠款 ========== -->
     <div class="panel" id="panel-payment">
       <div class="card">
-        <h2>未付款名單</h2>
+        <h2>未付款總覽</h2>
         <div id="debtList">
           <div class="loading"><div class="spinner"></div>載入中…</div>
         </div>
         <button class="btn btn-secondary" style="margin-top:12px" onclick="loadDebts()">重新整理</button>
+      </div>
+
+      <div class="card">
+        <h2>按同事查欠款（可篩日子／月份）</h2>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">
+          例：今日已食 3、4、7、8 日，但 9、11、23 日已預先落訂——可只選已食日子計欠款，或一齊睇預訂單。
+        </p>
+        <div class="row">
+          <div>
+            <label>同事 Initial</label>
+            <select id="debtPersonSelect" onchange="onDebtFilterChange()">
+              <option value="">— 請選擇 —</option>
+            </select>
+          </div>
+          <div>
+            <label>月份快速選</label>
+            <select id="debtMonthSelect" onchange="onDebtMonthChange()">
+              <option value="">— 唔限月份 —</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:10px">
+          <label>日子（可多選：Ctrl／Cmd 點選，或拖曳）</label>
+          <select id="debtDateSelect" multiple size="6" onchange="renderDebtPersonDetail()"
+            style="width:100%;min-height:120px;padding:8px;border-radius:8px;border:1px solid var(--border);font-size:.9rem">
+          </select>
+          <p style="font-size:.75rem;color:var(--muted);margin-top:4px">
+            留空 = 顯示該人全部未付日子　·　選月份會自動剔該月所有有單日子
+          </p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          <button class="btn btn-secondary" onclick="debtSelectPastOnly()">只選今日或之前（已食）</button>
+          <button class="btn btn-secondary" onclick="debtSelectFutureOnly()">只選未來（預先落訂）</button>
+          <button class="btn btn-secondary" onclick="debtSelectAllDates()">全選有單日子</button>
+          <button class="btn btn-secondary" onclick="debtClearDates()">清除日子選擇</button>
+        </div>
+        <div id="debtPersonDetail" style="margin-top:14px"></div>
       </div>
     </div>
 
@@ -1259,40 +1296,56 @@
     }
 
     // ===================== 欠款 =====================
+    let _debtAllOrders = []; // 最新全量（含已付，方便篩人）
+
     async function loadDebts() {
-      let orders = [];
+      let unpaid = [];
+      let all = [];
       if (apiUrl) {
         try {
-          orders = (await callApi('getAllUnpaid') || []).map(normalizeOrder);
-          // 更新本地：只保留已付的本地紀錄，未付以 Sheet 為準
-          const paidLocal = localOrders.filter(o => o.paid);
-          const unpaidIds = new Set(orders.map(o => o.id));
-          localOrders = paidLocal.filter(o => !unpaidIds.has(o.id)).concat(orders);
-          localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
+          unpaid = (await callApi('getAllUnpaid') || []).map(normalizeOrder);
+          try {
+            all = (await callApi('getAllOrders') || []).map(normalizeOrder);
+          } catch (e2) {
+            all = unpaid.slice();
+          }
+          // 合併更新本機未付狀態
+          const paidIds = new Set();
+          // 用 all 覆蓋 local 同日資料較完整
+          if (all.length) {
+            const byId = {};
+            localOrders.forEach(o => { byId[o.id] = o; });
+            all.forEach(o => { byId[o.id] = o; });
+            localOrders = Object.values(byId);
+            localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
+          }
         } catch (e) {
-          orders = localOrders.filter(o => !o.paid);
+          unpaid = localOrders.filter(o => !o.paid);
+          all = localOrders.slice();
           toast('無法連線 Sheet，顯示本機欠款');
         }
       } else {
-        orders = localOrders.filter(o => !o.paid);
+        unpaid = localOrders.filter(o => !o.paid);
+        all = localOrders.slice();
       }
-
-      const map = {};
-      orders.forEach(o => {
-        if (!map[o.initial]) map[o.initial] = { name: o.name, total: 0, count: 0, details: [] };
-        map[o.initial].total += Number(o.total) || 0;
-        map[o.initial].count++;
-        map[o.initial].details.push(`${o.date} ${o.mealCode}.$${o.total}`);
-      });
+      _debtAllOrders = all.length ? all : localOrders.slice();
 
       const box = document.getElementById('debtList');
+      const map = {};
+      unpaid.forEach(o => {
+        const k = String(o.initial || '').toUpperCase();
+        if (!k) return;
+        if (!map[k]) map[k] = { name: o.name || '', total: 0, count: 0, details: [] };
+        map[k].total += Number(o.total) || 0;
+        map[k].count += 1;
+        map[k].details.push((o.date || '') + ' ' + (o.mealCode || '') + '.' + (o.mealName || ''));
+      });
       const keys = Object.keys(map).sort();
       if (!keys.length) {
         box.innerHTML = '<p style="color:var(--success);font-weight:600">🎉 目前無人欠款</p>';
-        return;
-      }
-      box.innerHTML = `
-        <table>
+      } else {
+        box.innerHTML = `
+          <div class="table-wrap"><table>
           <thead><tr><th>Initial</th><th>次數</th><th>欠款</th><th>詳情</th><th>操作</th></tr></thead>
           <tbody>
             ${keys.map(k => `
@@ -1301,17 +1354,237 @@
                 <td>${map[k].count}</td>
                 <td style="color:var(--danger);font-weight:700">$${map[k].total}</td>
                 <td style="font-size:.8rem;color:#666">${map[k].details.join('<br>')}</td>
-                <td>
-                  <button class="btn btn-success" style="padding:6px 12px;font-size:.8rem;white-space:nowrap"
+                <td style="white-space:nowrap">
+                  <button class="btn btn-secondary" style="padding:6px 10px;font-size:.75rem;margin-bottom:4px"
+                    onclick="focusDebtPerson('${k}')">查詳情</button><br>
+                  <button class="btn btn-success" style="padding:6px 10px;font-size:.75rem"
                     onclick="markAllPaidByInitial('${k}')">一鍵已付 $${map[k].total}</button>
                 </td>
               </tr>
             `).join('')}
-          </tbody>
-        </table>
-        <p style="margin-top:10px;font-weight:600">總欠款：$${keys.reduce((s,k)=>s+map[k].total,0)}</p>
-        <p style="font-size:.8rem;color:var(--muted);margin-top:6px">資料來源：${apiUrl ? 'Google Sheet' : '本機快取'}</p>
+          </tbody></table></div>
+          <p style="margin-top:10px;font-weight:600">總欠款：$${keys.reduce((s,k)=>s+map[k].total,0)}</p>
+          <p style="font-size:.8rem;color:var(--muted);margin-top:6px">資料來源：${apiUrl ? 'Google Sheet' : '本機快取'}</p>
+        `;
+      }
+
+      populateDebtFilters();
+      renderDebtPersonDetail();
+    }
+
+    function populateDebtFilters() {
+      const personSel = document.getElementById('debtPersonSelect');
+      const monthSel = document.getElementById('debtMonthSelect');
+      if (!personSel || !monthSel) return;
+      const prevP = personSel.value;
+      const prevM = monthSel.value;
+
+      const initials = [...new Set(_debtAllOrders.map(o => String(o.initial || '').toUpperCase()).filter(Boolean))].sort();
+      personSel.innerHTML = '<option value="">— 請選擇 —</option>' +
+        initials.map(i => '<option value="'+i+'">'+i+'</option>').join('');
+      if (initials.includes(prevP)) personSel.value = prevP;
+
+      const months = [...new Set(_debtAllOrders.map(o => {
+        const d = normalizeDate(o.date) || o.date || '';
+        return d.length >= 7 ? d.slice(0, 7) : '';
+      }).filter(Boolean))].sort().reverse();
+      monthSel.innerHTML = '<option value="">— 唔限月份 —</option>' +
+        months.map(m => {
+          const [y, mo] = m.split('-');
+          return '<option value="'+m+'">'+y+'年'+parseInt(mo,10)+'月</option>';
+        }).join('');
+      if (months.includes(prevM)) monthSel.value = prevM;
+
+      refreshDebtDateOptions();
+    }
+
+    function focusDebtPerson(initial) {
+      const sel = document.getElementById('debtPersonSelect');
+      if (sel) {
+        sel.value = String(initial).toUpperCase();
+        onDebtFilterChange();
+        document.getElementById('debtPersonDetail')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    function onDebtFilterChange() {
+      document.getElementById('debtMonthSelect').value = '';
+      refreshDebtDateOptions();
+      renderDebtPersonDetail();
+    }
+
+    function onDebtMonthChange() {
+      refreshDebtDateOptions();
+      // 自動選該月所有有單日子
+      const month = document.getElementById('debtMonthSelect').value;
+      const dateSel = document.getElementById('debtDateSelect');
+      if (!dateSel) return;
+      [...dateSel.options].forEach(opt => {
+        opt.selected = month ? opt.value.startsWith(month) : false;
+      });
+      renderDebtPersonDetail();
+    }
+
+    function refreshDebtDateOptions() {
+      const person = (document.getElementById('debtPersonSelect').value || '').toUpperCase();
+      const month = document.getElementById('debtMonthSelect').value || '';
+      const dateSel = document.getElementById('debtDateSelect');
+      if (!dateSel) return;
+      const prev = new Set([...dateSel.selectedOptions].map(o => o.value));
+
+      let list = _debtAllOrders.slice();
+      if (person) list = list.filter(o => String(o.initial).toUpperCase() === person);
+      if (month) list = list.filter(o => (normalizeDate(o.date) || o.date || '').startsWith(month));
+
+      const dates = [...new Set(list.map(o => normalizeDate(o.date) || o.date).filter(Boolean))].sort();
+      const today = toDateKey(new Date());
+      dateSel.innerHTML = dates.map(d => {
+        let label = d;
+        try { label = formatDateLabel(new Date(d + 'T12:00:00')); } catch (e) {}
+        const tag = d < today ? '已食' : (d === today ? '今日' : '預訂');
+        return '<option value="'+d+'"'+(prev.has(d)?' selected':'')+'>'+label+'（'+tag+'）</option>';
+      }).join('');
+    }
+
+    function getSelectedDebtDates() {
+      const dateSel = document.getElementById('debtDateSelect');
+      if (!dateSel) return [];
+      return [...dateSel.selectedOptions].map(o => o.value);
+    }
+
+    function debtSelectPastOnly() {
+      const today = toDateKey(new Date());
+      const dateSel = document.getElementById('debtDateSelect');
+      if (!dateSel) return;
+      [...dateSel.options].forEach(opt => { opt.selected = opt.value <= today; });
+      renderDebtPersonDetail();
+    }
+
+    function debtSelectFutureOnly() {
+      const today = toDateKey(new Date());
+      const dateSel = document.getElementById('debtDateSelect');
+      if (!dateSel) return;
+      [...dateSel.options].forEach(opt => { opt.selected = opt.value > today; });
+      renderDebtPersonDetail();
+    }
+
+    function debtSelectAllDates() {
+      const dateSel = document.getElementById('debtDateSelect');
+      if (!dateSel) return;
+      [...dateSel.options].forEach(opt => { opt.selected = true; });
+      renderDebtPersonDetail();
+    }
+
+    function debtClearDates() {
+      const dateSel = document.getElementById('debtDateSelect');
+      if (!dateSel) return;
+      [...dateSel.options].forEach(opt => { opt.selected = false; });
+      renderDebtPersonDetail();
+    }
+
+    function renderDebtPersonDetail() {
+      const box = document.getElementById('debtPersonDetail');
+      if (!box) return;
+      const person = (document.getElementById('debtPersonSelect').value || '').toUpperCase();
+      if (!person) {
+        box.innerHTML = '<p style="color:#999;font-size:.9rem">請先選擇同事 Initial</p>';
+        return;
+      }
+
+      let orders = _debtAllOrders.filter(o => String(o.initial).toUpperCase() === person);
+      const selectedDates = getSelectedDebtDates();
+      if (selectedDates.length) {
+        const set = new Set(selectedDates);
+        orders = orders.filter(o => set.has(normalizeDate(o.date) || o.date));
+      }
+      const month = document.getElementById('debtMonthSelect').value || '';
+      if (month && !selectedDates.length) {
+        orders = orders.filter(o => (normalizeDate(o.date) || o.date || '').startsWith(month));
+      }
+
+      orders.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+      const today = toDateKey(new Date());
+      const unpaid = orders.filter(o => !o.paid);
+      const paid = orders.filter(o => o.paid);
+      const unpaidTotal = unpaid.reduce((s, o) => s + (Number(o.total) || 0), 0);
+      const pastUnpaid = unpaid.filter(o => (normalizeDate(o.date) || o.date) <= today);
+      const futureUnpaid = unpaid.filter(o => (normalizeDate(o.date) || o.date) > today);
+      const pastTotal = pastUnpaid.reduce((s, o) => s + (Number(o.total) || 0), 0);
+      const futureTotal = futureUnpaid.reduce((s, o) => s + (Number(o.total) || 0), 0);
+
+      if (!orders.length) {
+        box.innerHTML = '<p style="color:#999">此篩選條件下沒有訂單</p>';
+        return;
+      }
+
+      const rows = orders.map(o => {
+        const d = normalizeDate(o.date) || o.date;
+        const tag = d < today ? '<span class="badge badge-paid" style="background:#e0e7ff;color:#3730a3">已食</span>'
+          : (d === today ? '<span class="badge badge-paid">今日</span>'
+          : '<span class="badge badge-unpaid" style="background:#fef3c7;color:#92400e">預訂</span>');
+        let dateLabel = d;
+        try { dateLabel = formatDateLabel(new Date(d + 'T12:00:00')); } catch (e) {}
+        return `<tr>
+          <td>${dateLabel}<br>${tag}</td>
+          <td>${o.mealCode}. ${o.mealName}</td>
+          <td>${o.drink || '—'}</td>
+          <td>$${o.total}</td>
+          <td><span class="badge ${o.paid ? 'badge-paid' : 'badge-unpaid'}">${o.paid ? '已付' : '未付'}</span></td>
+          <td>
+            ${!o.paid ? `<button class="btn btn-success" style="padding:4px 8px;font-size:.75rem" onclick="markPaid('${o.id}')">標已付</button>` : ''}
+            <button class="btn btn-danger" style="padding:4px 8px;font-size:.75rem" onclick="deleteOrder('${o.id}')">刪/取消</button>
+          </td>
+        </tr>`;
+      }).join('');
+
+      box.innerHTML = `
+        <div class="stat-big" style="margin-bottom:12px">
+          <div class="stat-card"><div class="num">$${unpaidTotal}</div><div class="lbl">${person} 篩選內未付</div></div>
+          <div class="stat-card alt"><div class="num">$${pastTotal}</div><div class="lbl">已食／今日未付</div></div>
+          <div class="stat-card warn"><div class="num">$${futureTotal}</div><div class="lbl">預訂單未付</div></div>
+        </div>
+        <p style="font-size:.85rem;margin-bottom:8px">
+          未付 <strong>${unpaid.length}</strong> 單　·　已付 ${paid.length} 單　·　共 ${orders.length} 單
+          ${selectedDates.length ? '（已選 '+selectedDates.length+' 個日子）' : (month ? '（月份 '+month+'）' : '（全部日子）')}
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          ${unpaid.length ? `<button class="btn btn-success" onclick="markPaidForDebtFilter('${person}')">將篩選內 ${unpaid.length} 單標已付（$${unpaidTotal}）</button>` : ''}
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>日子</th><th>飯餐</th><th>飲品</th><th>金額</th><th>狀態</th><th>操作</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
       `;
+    }
+
+    async function markPaidForDebtFilter(person) {
+      person = String(person || '').toUpperCase();
+      let orders = _debtAllOrders.filter(o => !o.paid && String(o.initial).toUpperCase() === person);
+      const selectedDates = getSelectedDebtDates();
+      if (selectedDates.length) {
+        const set = new Set(selectedDates);
+        orders = orders.filter(o => set.has(normalizeDate(o.date) || o.date));
+      } else {
+        const month = document.getElementById('debtMonthSelect').value || '';
+        if (month) orders = orders.filter(o => (normalizeDate(o.date) || o.date || '').startsWith(month));
+      }
+      if (!orders.length) { toast('沒有未付訂單'); return; }
+      const total = orders.reduce((s, o) => s + (Number(o.total) || 0), 0);
+      if (!confirm(`確認將 ${person} 篩選內 ${orders.length} 單標為已付（合共 $${total}）？`)) return;
+
+      if (apiUrl) {
+        for (const o of orders) {
+          try { await callApi('markPaid', { id: o.id }); } catch (e) { console.warn(e); }
+        }
+      }
+      const ids = new Set(orders.map(o => String(o.id)));
+      localOrders = localOrders.map(o => ids.has(String(o.id)) ? {...o, paid: true} : o);
+      _debtAllOrders = _debtAllOrders.map(o => ids.has(String(o.id)) ? {...o, paid: true} : o);
+      localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
+      loadOrders();
+      loadDebts();
+      toast(`✅ ${person} 已標 ${orders.length} 單已付（$${total}）`);
     }
 
 
