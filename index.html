@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
-  <title>六記 · 同事訂飯系統</title>
+  <title>HOYU PANDA V1.03</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
@@ -549,7 +549,7 @@
         applyDrinkPrefForInitial();
         if (!ok && !isInAppBrowser()) {
           const tip = isChromeMobile()
-            ? '❌ Chrome 一般模式連線失敗（無痕正常多半是快取）。請撳「清除快取並重載」，或設定→網站設定→清除並重新整理。'
+            ? '❌ 連線失敗。已改用 NVN 同一套 fetch POST；請清除快取並重載。若仍失敗請重新部署 Code.gs。'
             : '❌ 連不上 Google Sheet。可試「重新連線」或「清除快取並重載」。';
           showConnBar(tip, 'err');
         }
@@ -1484,6 +1484,33 @@
       return Math.max(0, t);
     }
 
+
+    /** WhatsApp 用：正常冰/糖省略；其餘用半形括號 */
+    function formatDrinkForExport(raw) {
+      if (!raw) return '';
+      let s = String(raw).trim();
+      // 凍奶茶（少冰・少糖） 備註  或  凍奶茶（正常・正常）
+      const m = s.match(/^(.+?)(?:（([^）]*)）)?(?:\s+(.+))?$/);
+      if (!m) return s;
+      let name = (m[1] || '').trim();
+      const opts = (m[2] || '').trim();
+      const note = (m[3] || '').trim();
+      const parts = [];
+      if (opts) {
+        opts.split(/[・·‧/／,，\s]+/).filter(Boolean).forEach(p => {
+          p = p.trim();
+          if (!p) return;
+          // 正常、正常冰、正常糖、全糖（當正常）唔寫
+          if (p === '正常' || p === '正常冰' || p === '正常糖' || p === '全糖') return;
+          parts.push(p);
+        });
+      }
+      let out = name;
+      if (parts.length) out += '(' + parts.join('・') + ')';
+      if (note) out += ' ' + note;
+      return out;
+    }
+
     function generateExport() {
       const date = document.getElementById('exportDate').value;
       let orders = localOrders.filter(o => o.date === date);
@@ -1507,11 +1534,13 @@
           text += `${v} × ${k}\n`;
         });
 
-        // 飲品：同類合併，例如 凍檸茶（正常・少糖） ×3
+        // 飲品：同類合併；正常冰／正常糖唔寫
+        // 例：凍檸茶（正常・少糖）→ 凍檸茶(少糖)；凍奶茶（正常・正常）→ 凍奶茶
         const drinkCount = {};
         orders.forEach(o => {
           if (!o.drink) return;
-          const key = String(o.drink).trim();
+          const key = formatDrinkForExport(o.drink);
+          if (!key) return;
           drinkCount[key] = (drinkCount[key] || 0) + 1;
         });
         const drinkKeys = Object.keys(drinkCount);
@@ -1729,97 +1758,44 @@
         setTimeout(hideConnBar, 2500);
         toast('連線成功');
       } else {
-        showConnBar('❌ 仍然連不上。Chrome 可試：關閉「安全 DNS」或改用 Samsung Internet。', 'err');
+        showConnBar('❌ 仍然連不上。請「清除快取並重載」後再試；若仍失敗請用無痕測試。', 'err');
         toast('連線失敗');
       }
     }
 
-    /** 單次 JSONP（唔經佇列） */
-    function jsonpOnce(action, payload, timeoutMs) {
-      return new Promise((resolve, reject) => {
-        const cbName = '_lunchCb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
-        let script = null;
-        const timeout = setTimeout(() => {
-          cleanup();
-          reject(new Error('連線逾時'));
-        }, timeoutMs);
-
-        function cleanup() {
-          clearTimeout(timeout);
-          try { delete window[cbName]; } catch (e) { window[cbName] = undefined; }
-          if (script && script.parentNode) {
-            try { script.parentNode.removeChild(script); } catch (e) {}
-          }
-        }
-
-        window[cbName] = function (data) {
-          cleanup();
-          if (data && data.error) reject(new Error(data.error));
-          else resolve(data && data.result !== undefined ? data.result : data);
-        };
-
-        script = document.createElement('script');
-        const params = new URLSearchParams();
-        if (action && action !== 'ping') params.set('action', action);
-        params.set('callback', cbName);
-        params.set('_t', String(Date.now()) + String(Math.random()).slice(2, 6));
-        Object.keys(payload || {}).forEach(k => {
-          if (payload[k] !== undefined && payload[k] !== null) {
-            params.set(k, typeof payload[k] === 'object' ? JSON.stringify(payload[k]) : String(payload[k]));
-          }
-        });
-        script.src = apiUrl + (apiUrl.indexOf('?') >= 0 ? '&' : '?') + params.toString();
-        // Chrome：唔用 async，按順序執行較穩
-        script.async = false;
-        script.charset = 'utf-8';
-        script.onerror = function () {
-          cleanup();
-          reject(new Error('無法載入 Google Script'));
-        };
-        // 插入 <head> 有時比 body 更穩（Chrome）
-        (document.head || document.body).appendChild(script);
-      });
-    }
-
+    /**
+     * 同 NVN 一樣：全部用 fetch POST + r.json()
+     * 唔設 Content-Type、唔用 no-cors、唔用 JSONP → Chrome 一般模式先會正常
+     */
     async function callApi(action, payload = {}) {
       if (!apiUrl) apiUrl = DEFAULT_API_URL;
 
-      const writeActions = ['addOrder', 'markPaid', 'markAllPaid', 'deleteOrder', 'setSetting', 'importMenus'];
-
-      if (writeActions.includes(action)) {
-        // 只用一次 fetch 寫入（唔好再 form/iframe，否則會開新分頁 + 訂單 DOUBLE）
-        const body = { action, ...payload };
-        try {
-          await fetch(apiUrl, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify(body),
-            cache: 'no-store',
-            redirect: 'follow'
-          });
-        } catch (e) {
-          console.warn('fetch write', e);
-          throw new Error('寫入失敗：' + e.message);
-        }
-        return { ok: true };
+      const body = Object.assign({ action: action === 'ping' ? 'ping' : action }, payload || {});
+      // ping 唔使額外欄位
+      if (action === 'ping') {
+        body.action = 'ping';
       }
 
-      // 讀取：佇列 + 重試（Chrome 專用較長 timeout）
-      const isPing = action === 'ping';
-      const baseTimeout = isChromeMobile() ? (isPing ? 20000 : 25000) : (isPing ? 12000 : 18000);
-      const maxTry = isChromeMobile() ? 3 : 2;
-
+      // 串列避免同時太多請求（可選，同 Chrome 較穩）
       return enqueueApi(async () => {
         let lastErr = null;
-        for (let i = 0; i < maxTry; i++) {
-          if (i > 0) await delay(400 * i); // 重試前稍等，避免 Chrome 節流
+        const tries = 2;
+        for (let i = 0; i < tries; i++) {
+          if (i > 0) await delay(500 * i);
           try {
-            const result = await jsonpOnce(action, payload, baseTimeout + i * 5000);
-            return result;
+            const res = await fetch(apiUrl, {
+              method: 'POST',
+              body: JSON.stringify(body)
+              // 刻意唔加 headers / mode —— 同 NVN 完全一致
+            });
+            // 有時 redirect 後 status 仍可讀 json
+            const data = await res.json();
+            if (data && data.error) throw new Error(data.error);
+            if (data && data.status === 'error') throw new Error(data.message || 'error');
+            return (data && data.result !== undefined) ? data.result : data;
           } catch (e) {
             lastErr = e;
-            console.warn('API try', i + 1, action, e.message);
+            console.warn('callApi try', i + 1, action, e && e.message);
           }
         }
         throw lastErr || new Error('連線失敗');
@@ -1905,16 +1881,17 @@ key | value
 
 ─── 複製開始 ───
 function doPost(e) {
+  // 同 NVN：純 POST + JSON body，Chrome 可正常讀 response
   try {
     var data = {};
-    // 支援 JSON body 或 form 欄位 payload
     if (e.postData && e.postData.contents) {
       try {
         data = JSON.parse(e.postData.contents);
       } catch (err1) {
-        // form: payload=...
         if (e.parameter && e.parameter.payload) {
           data = JSON.parse(e.parameter.payload);
+        } else {
+          throw err1;
         }
       }
     } else if (e.parameter && e.parameter.payload) {
@@ -2121,6 +2098,9 @@ function handleAction(action, data) {
       });
       result = { ok: true, count: items.length };
     }
+  }
+  else if (action === 'ping' || action === '' || !action) {
+    result = { ok: true, msg: '六記訂飯 API v5 (NVN-style POST)' };
   }
   else {
     throw new Error('Unknown action: ' + action);
