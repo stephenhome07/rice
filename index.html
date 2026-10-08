@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
-  <title>HO YU PANDA V1.04</title>
+  <title>HO YU PANDA V1.05</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
@@ -1255,8 +1255,9 @@
         loadDebts();
         return;
       }
-      const total = list.reduce((s, o) => s + (Number(o.total) || 0), 0);
-      if (!confirm(`確認 ${initial} 已付清全部 ${list.length} 單（合共 $${total}）？\n（適合收齊 PayMe 後一次標記）`)) return;
+      const dayCountsAll = dayCountMapFromOrders(_debtAllOrders.length ? _debtAllOrders : localOrders);
+      const total = list.reduce((s, o) => s + effectiveOrderTotal(o, dayCountsAll), 0);
+      if (!confirm(`確認 ${initial} 已付清全部 ${list.length} 單（合共 $${total}，已計滿5減2）？\n（適合收齊 PayMe 後一次標記）`)) return;
 
       // 優先用 API 一次處理
       if (apiUrl) {
@@ -1332,13 +1333,18 @@
 
       const box = document.getElementById('debtList');
       const map = {};
+      // 全日份數（含已付）先計好，先至有滿5減2
+      const dayCounts = dayCountMapFromOrders(_debtAllOrders.length ? _debtAllOrders : localOrders);
       unpaid.forEach(o => {
         const k = String(o.initial || '').toUpperCase();
         if (!k) return;
         if (!map[k]) map[k] = { name: o.name || '', total: 0, count: 0, details: [] };
-        map[k].total += Number(o.total) || 0;
+        const eff = effectiveOrderTotal(o, dayCounts);
+        map[k].total += eff;
         map[k].count += 1;
-        map[k].details.push((o.date || '') + ' ' + (o.mealCode || '') + '.' + (o.mealName || ''));
+        const d = normalizeDate(o.date) || o.date || '';
+        const bulkTag = (dayCounts[d] || 0) >= BULK_THRESHOLD ? ' (−2)' : '';
+        map[k].details.push((o.date || '') + ' ' + (o.mealCode || '') + '.' + (o.mealName || '') + ' $' + eff + bulkTag);
       });
       const keys = Object.keys(map).sort();
       if (!keys.length) {
@@ -1505,13 +1511,14 @@
       orders.sort((a, b) => String(a.date).localeCompare(String(b.date)));
 
       const today = toDateKey(new Date());
+      const dayCounts = dayCountMapFromOrders(_debtAllOrders.length ? _debtAllOrders : localOrders);
       const unpaid = orders.filter(o => !o.paid);
       const paid = orders.filter(o => o.paid);
-      const unpaidTotal = unpaid.reduce((s, o) => s + (Number(o.total) || 0), 0);
+      const unpaidTotal = unpaid.reduce((s, o) => s + effectiveOrderTotal(o, dayCounts), 0);
       const pastUnpaid = unpaid.filter(o => (normalizeDate(o.date) || o.date) <= today);
       const futureUnpaid = unpaid.filter(o => (normalizeDate(o.date) || o.date) > today);
-      const pastTotal = pastUnpaid.reduce((s, o) => s + (Number(o.total) || 0), 0);
-      const futureTotal = futureUnpaid.reduce((s, o) => s + (Number(o.total) || 0), 0);
+      const pastTotal = pastUnpaid.reduce((s, o) => s + effectiveOrderTotal(o, dayCounts), 0);
+      const futureTotal = futureUnpaid.reduce((s, o) => s + effectiveOrderTotal(o, dayCounts), 0);
 
       if (!orders.length) {
         box.innerHTML = '<p style="color:#999">此篩選條件下沒有訂單</p>';
@@ -1525,11 +1532,17 @@
           : '<span class="badge badge-unpaid" style="background:#fef3c7;color:#92400e">預訂</span>');
         let dateLabel = d;
         try { dateLabel = formatDateLabel(new Date(d + 'T12:00:00')); } catch (e) {}
+        const eff = effectiveOrderTotal(o, dayCounts);
+        const dKey = normalizeDate(o.date) || o.date || '';
+        const hasBulk = (dayCounts[dKey] || 0) >= BULK_THRESHOLD;
+        const priceCell = hasBulk && !o.paid
+          ? `$${eff}<br><small style="color:#999;text-decoration:line-through">$${o.total}</small>`
+          : `$${eff}`;
         return `<tr>
           <td>${dateLabel}<br>${tag}</td>
           <td>${o.mealCode}. ${o.mealName}</td>
           <td>${o.drink || '—'}</td>
-          <td>$${o.total}</td>
+          <td>${priceCell}</td>
           <td><span class="badge ${o.paid ? 'badge-paid' : 'badge-unpaid'}">${o.paid ? '已付' : '未付'}</span></td>
           <td>
             ${!o.paid ? `<button class="btn btn-success" style="padding:4px 8px;font-size:.75rem" onclick="markPaid('${o.id}')">標已付</button>` : ''}
@@ -1570,8 +1583,9 @@
         if (month) orders = orders.filter(o => (normalizeDate(o.date) || o.date || '').startsWith(month));
       }
       if (!orders.length) { toast('沒有未付訂單'); return; }
-      const total = orders.reduce((s, o) => s + (Number(o.total) || 0), 0);
-      if (!confirm(`確認將 ${person} 篩選內 ${orders.length} 單標為已付（合共 $${total}）？`)) return;
+      const dayCounts = dayCountMapFromOrders(_debtAllOrders.length ? _debtAllOrders : localOrders);
+      const total = orders.reduce((s, o) => s + effectiveOrderTotal(o, dayCounts), 0);
+      if (!confirm(`確認將 ${person} 篩選內 ${orders.length} 單標為已付（合共 $${total}，已計滿5減2）？`)) return;
 
       if (apiUrl) {
         for (const o of orders) {
@@ -1755,6 +1769,23 @@
       let t = (order.mealPrice || 0) + (order.takeawayFee != null ? order.takeawayFee : TAKEAWAY_FEE) + (order.drinkPrice || 0);
       if (dayCount >= BULK_THRESHOLD) t -= BULK_DISCOUNT;
       return Math.max(0, t);
+    }
+
+    /** 以全日訂單份數計算優惠後金額（欠款合計用） */
+    function dayCountMapFromOrders(allOrders) {
+      const map = {};
+      (allOrders || []).forEach(o => {
+        const d = normalizeDate(o.date) || o.date || '';
+        if (!d) return;
+        map[d] = (map[d] || 0) + 1;
+      });
+      return map;
+    }
+
+    function effectiveOrderTotal(order, dayCountMap) {
+      const d = normalizeDate(order.date) || order.date || '';
+      const n = (dayCountMap && dayCountMap[d]) || 1;
+      return getEffectiveTotal(order, n);
     }
 
 
