@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
-  <title>HO YU PANDA V1.05</title>
+  <title>HO YU PANDA V1.07</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
@@ -410,6 +410,19 @@
 
     <!-- ========== 欠款 ========== -->
     <div class="panel" id="panel-payment">
+      <div class="card" style="background:linear-gradient(135deg,#e8f5e9,#f1f8e9);border:1px solid #a5d6a7">
+        <h2 style="color:#2e7d32">💳 PayMe 找數</h2>
+        <p style="font-size:.9rem;margin:8px 0">同事可撳下面連結用 PayMe 轉賬：</p>
+        <p style="font-size:1.05rem;font-weight:700;word-break:break-all">
+          <a href="https://payme.hsbc/stephenhome07" target="_blank" rel="noopener" style="color:#1b5e20">https://payme.hsbc/stephenhome07</a>
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          <button class="btn btn-success" onclick="copyPayMeLink()">📋 複製 PayMe 連結</button>
+          <a class="btn btn-primary" href="https://payme.hsbc/stephenhome07" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">開啟 PayMe</a>
+        </div>
+        <p style="font-size:.75rem;color:var(--muted);margin-top:8px">轉賬後請通知負責人，再由負責人輸入 PIN 標記已付。</p>
+      </div>
+
       <div class="card">
         <h2>未付款總覽</h2>
         <div id="debtList">
@@ -502,6 +515,9 @@
       </div>
       <div class="card">
         <h2>系統</h2>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:8px">
+          管理 PIN（標已付／刪舊單）寫在程式 <code>ADMIN_PIN</code>（預設 0721）。要改 PIN 請改 index.html 該行後重新上載。
+        </p>
         <button class="btn btn-secondary" onclick="document.getElementById('configBox').classList.remove('hidden')">重新設定 API 網址</button>
         <button class="btn btn-secondary" onclick="clearLocalCache()">清除本機快取</button>
         <button class="btn btn-primary" style="margin-top:8px" onclick="hardResetSite()">🔧 Chrome 連線修復（清除快取並強制重載）</button>
@@ -527,6 +543,9 @@
     const COLD_EXTRA = 2;     // 凍飲額外 +$2
     const BULK_DISCOUNT = 2;  // 當日滿5份，每飯 −$2
     const BULK_THRESHOLD = 5;
+    // 管理 PIN（4位）：標已付、刪除舊單需輸入。可自行改此數字
+    const ADMIN_PIN = '0727';
+    const PAYME_URL = 'https://payme.hsbc/stephenhome07';
 
     // ===================== 狀態 =====================
     // 預設 API（強制使用，避免手機殘留舊網址）
@@ -1224,11 +1243,42 @@
       };
     }
 
+
+    /** 要求輸入 4 位 PIN；正確回傳 true */
+    function requireAdminPin(reason) {
+      const msg = (reason || '需要管理員 PIN') + '\n請輸入 4 位數字：';
+      const input = prompt(msg, '');
+      if (input === null) return false;
+      if (String(input).trim() === ADMIN_PIN) return true;
+      toast('❌ PIN 錯誤');
+      return false;
+    }
+
+    /** 訂單日子是否「今日或未來」（可自由刪／取消） */
+    function isTodayOrFutureOrder(order) {
+      if (!order) return false;
+      const d = normalizeDate(order.date) || order.date || '';
+      if (!d) return false;
+      const today = toDateKey(new Date());
+      return d >= today;
+    }
+
+    function findOrderById(id) {
+      id = String(id);
+      return (_debtAllOrders || []).find(o => String(o.id) === id)
+        || (localOrders || []).find(o => String(o.id) === id)
+        || null;
+    }
+
     async function markPaid(id) {
+      if (!requireAdminPin('標記已付需要 PIN')) return;
       if (apiUrl) {
         try { await callApi('markPaid', { id }); } catch(e) { toast(e.message); }
       }
       localOrders = localOrders.map(o => o.id === id ? {...o, paid:true} : o);
+      if (_debtAllOrders && _debtAllOrders.length) {
+        _debtAllOrders = _debtAllOrders.map(o => String(o.id) === String(id) ? {...o, paid:true} : o);
+      }
       localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
       loadOrders();
       loadDebts();
@@ -1255,6 +1305,7 @@
         loadDebts();
         return;
       }
+      if (!requireAdminPin('一鍵標已付需要 PIN')) return;
       const dayCountsAll = dayCountMapFromOrders(_debtAllOrders.length ? _debtAllOrders : localOrders);
       const total = list.reduce((s, o) => s + effectiveOrderTotal(o, dayCountsAll), 0);
       if (!confirm(`確認 ${initial} 已付清全部 ${list.length} 單（合共 $${total}，已計滿5減2）？\n（適合收齊 PayMe 後一次標記）`)) return;
@@ -1285,15 +1336,31 @@
     }
 
     async function deleteOrder(id) {
-      if (!confirm('確定刪除此訂單？')) return;
+      const order = findOrderById(id);
+      if (!order) {
+        toast('找不到訂單');
+        return;
+      }
+      const canFree = isTodayOrFutureOrder(order);
+      if (!canFree) {
+        if (!requireAdminPin('刪除「過去日子」的訂單需要 PIN（避免誤刪）')) return;
+      }
+      const dlabel = order.date || '';
+      const tip = canFree
+        ? ('確定取消／刪除此訂單？\n' + dlabel + ' · ' + (order.initial || '') + ' · ' + (order.mealName || ''))
+        : ('【PIN 已通過】確定刪除過去訂單？\n' + dlabel + ' · ' + (order.initial || '') + ' · ' + (order.mealName || ''));
+      if (!confirm(tip)) return;
       if (apiUrl) {
         try { await callApi('deleteOrder', { id }); } catch(e) { toast(e.message); }
       }
-      localOrders = localOrders.filter(o => o.id !== id);
+      localOrders = localOrders.filter(o => String(o.id) !== String(id));
+      if (_debtAllOrders && _debtAllOrders.length) {
+        _debtAllOrders = _debtAllOrders.filter(o => String(o.id) !== String(id));
+      }
       localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
       loadOrders();
       loadDebts();
-      toast('已刪除');
+      toast(canFree ? '已取消／刪除' : '已刪除（過去訂單）');
     }
 
     // ===================== 欠款 =====================
@@ -1572,6 +1639,7 @@
     }
 
     async function markPaidForDebtFilter(person) {
+      if (!requireAdminPin('篩選標已付需要 PIN')) return;
       person = String(person || '').toUpperCase();
       let orders = _debtAllOrders.filter(o => !o.paid && String(o.initial).toUpperCase() === person);
       const selectedDates = getSelectedDebtDates();
@@ -2146,6 +2214,15 @@
       const u = new URL(location.href);
       u.searchParams.set('_r', String(Date.now()));
       location.replace(u.toString());
+    }
+
+    function copyPayMeLink() {
+      const url = (typeof PAYME_URL !== 'undefined' && PAYME_URL) ? PAYME_URL : 'https://payme.hsbc/stephenhome07';
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(() => toast('PayMe 連結已複製')).catch(() => prompt('請手動複製：', url));
+      } else {
+        prompt('請手動複製：', url);
+      }
     }
 
     function toast(msg) {
