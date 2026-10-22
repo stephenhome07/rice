@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
-  <title>HO YU PANDA V1.09</title>
+  <title>HO YU PANDA V1.10</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
@@ -1198,19 +1198,20 @@
       }
 
       const dayCount = orders.length;
-      const hasBulk = dayCount >= BULK_THRESHOLD;
+      const bulkDisc = getBulkDiscount(dayCount);
+      const bulkLab = getBulkLabel(dayCount);
       const totalAmt = orders.reduce((s,o) => s + (Number(o.total) || 0), 0);
       const effectiveAmt = orders.reduce((s,o) => s + getEffectiveTotal(o, dayCount), 0);
       const unpaid = orders.filter(o => !o.paid).length;
       document.getElementById('orderStats').innerHTML = `
         <div class="status-item">共 ${dayCount} 份</div>
-        <div class="status-item">${hasBulk ? '應付 $' + effectiveAmt + '（已減滿5份優惠）' : '合計 $' + totalAmt}</div>
+        <div class="status-item">${bulkDisc ? '應付 $' + effectiveAmt + '（' + bulkLab + '）' : '合計 $' + totalAmt}</div>
         <div class="status-item">${unpaid ? unpaid + ' 人未付' : '全部已付 ✅'}</div>
       `;
 
       tbody.innerHTML = orders.map(o => {
         const eff = getEffectiveTotal(o, dayCount);
-        const priceLabel = hasBulk && eff !== Number(o.total)
+        const priceLabel = bulkDisc && eff !== Number(o.total)
           ? `$${eff}<br><small style="color:#999;text-decoration:line-through">$${o.total}</small>`
           : `$${o.total}`;
         return `
