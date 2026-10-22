@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
-  <title>HO YU PANDA V1.07</title>
+  <title>HO YU PANDA V1.08</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
@@ -242,6 +242,7 @@
 
     <!-- ========== 落單 ========== -->
     <div class="panel active" id="panel-order">
+      <div id="orderLockBanner" style="display:none;margin-bottom:12px;padding:12px 14px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;font-size:.9rem;font-weight:600"></div>
       <div class="card">
         <h2>1. 你的 Initial</h2>
         <div class="row">
@@ -326,7 +327,7 @@
           <div class="summary-row total"><span>合計</span><span id="sumTotal">$0</span></div>
         </div>
         <p style="font-size:.8rem;color:var(--muted);margin-top:8px">
-          飲品免費　·　凍飲另加 $2　·　每單外賣 +$1　·　當日滿 5 份每飯 −$2（結算時自動計）
+          飲品免費　·　凍飲另加 $2　·　每單外賣 +$1　·　當日滿5/10/15份每飯 −$2/$4/$6（結算時自動計）
         </p>
         <label style="margin-top:12px">備註（可選）</label>
         <input type="text" id="orderNote" placeholder="例如 少油 / 多飯" />
@@ -392,19 +393,11 @@
         </div>
       </div>
       <div class="card">
-        <h2>設定拎飯人（按日子）</h2>
-        <div class="row">
-          <div>
-            <label>日子</label>
-            <select id="pickupDateSelect"></select>
-          </div>
-          <div>
-            <label>拎飯人（Initial 或名字）</label>
-            <input type="text" id="pickupByDate" placeholder="例如 CKH" />
-          </div>
-        </div>
-        <button class="btn btn-primary" style="margin-top:10px" onclick="savePickupByDate()">儲存此日拎飯人</button>
-        <p style="font-size:.8rem;color:var(--muted);margin-top:8px">亦可用頂部藍色列快速改「今日」拎飯人。</p>
+        <h2>設定拎飯人（按星期）</h2>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">每星期循環：例如逢星期一固定某人拎飯。</p>
+        <div id="weekdayPickupFields"></div>
+        <button class="btn btn-primary" style="margin-top:10px" onclick="savePickupByWeekday()">儲存各星期拎飯人</button>
+        <p style="font-size:.8rem;color:var(--muted);margin-top:8px">頂部藍色列會自動顯示「今日」對應星期的拎飯人。</p>
       </div>
     </div>
 
@@ -479,9 +472,12 @@
           <div style="font-size:.85rem;color:#166534;margin-bottom:4px">預覽（可直接複製）</div>
           <textarea id="exportText" readonly></textarea>
           <button class="btn btn-success btn-block" onclick="copyExport()">📋 複製到剪貼簿</button>
+          <button class="btn btn-primary btn-block" style="margin-top:8px" onclick="lockOrdersUntilExportDate()">🔒 鎖定訂單（所選日子及之前不可再改）</button>
+          <button class="btn btn-secondary btn-block" style="margin-top:8px" onclick="unlockOrders()">🔓 解除鎖定（需 PIN）</button>
+          <p id="orderLockStatus" style="font-size:.85rem;margin-top:8px;color:var(--danger);font-weight:600"></p>
         </div>
         <p style="font-size:.8rem;color:var(--muted);margin-top:10px">
-          預設備註：12:15-12:45 送到，可放可譽中學門口，直行 5-10 步轉右走廊上的長枱（放外賣專用，電聯未必有人即時聽）
+          預設備註：12:15-12:45 送到。鎖定後，同事不能再新增／修改／取消「鎖定日及之前」的訂單。
         </p>
       </div>
     </div>
@@ -489,16 +485,11 @@
     <!-- ========== 管理 ========== -->
     <div class="panel" id="panel-admin">
       <div class="card">
-        <h2>拎飯人</h2>
-        <div class="row">
-          <div>
-            <label>今日負責拎飯的人</label>
-            <input type="text" id="adminPickup" placeholder="例如 CKH / 阿明" />
-          </div>
-          <div style="display:flex;align-items:flex-end">
-            <button class="btn btn-primary" onclick="savePickup()">儲存</button>
-          </div>
-        </div>
+        <h2>拎飯人（按星期）</h2>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:8px">與總覽相同設定，儲存後每星期自動套用。</p>
+        <div id="weekdayPickupFieldsAdmin"></div>
+        <button class="btn btn-primary" style="margin-top:10px" onclick="savePickupByWeekday()">儲存各星期拎飯人</button>
+        <p style="font-size:.85rem;margin-top:10px">今日拎飯：<strong id="adminPickupToday">—</strong></p>
       </div>
       <div class="card">
         <h2>菜單匯入（下個月用）</h2>
@@ -541,8 +532,14 @@
     // 飲品免費；只有凍飲 +$2
     const TAKEAWAY_FEE = 1;   // 每單外賣 +$1
     const COLD_EXTRA = 2;     // 凍飲額外 +$2
-    const BULK_DISCOUNT = 2;  // 當日滿5份，每飯 −$2
-    const BULK_THRESHOLD = 5;
+    // 批量優惠：滿5 −$2、滿10 −$4、滿15 −$6（每飯）
+    const BULK_TIERS = [
+      { min: 15, discount: 6 },
+      { min: 10, discount: 4 },
+      { min: 5, discount: 2 }
+    ];
+    const BULK_THRESHOLD = 5; // 最低門檻（顯示用）
+    const BULK_DISCOUNT = 2;  // 兼容舊代碼的預設
     // 管理 PIN（4位）：標已付、刪除舊單需輸入。可自行改此數字
     const ADMIN_PIN = '0727';
     const PAYME_URL = 'https://payme.hsbc/stephenhome07';
@@ -578,8 +575,11 @@
       document.getElementById('todayLabel').textContent = formatDateLabel(new Date());
       if (apiUrl) document.getElementById('configBox').classList.add('hidden');
       document.getElementById('apiUrlInput').value = apiUrl;
-      document.getElementById('pickupPerson').textContent = pickupPerson || '未設定';
-      document.getElementById('adminPickup').value = pickupPerson;
+      refreshPickupDisplay();
+      renderWeekdayPickupFields();
+      updateOrderLockBanner();
+      const od = document.getElementById('orderDate');
+      if (od) od.addEventListener('change', updateOrderLockBanner);
 
       setupTabs();
       setupDrinkToggle();
@@ -595,6 +595,7 @@
       (async () => {
         // 必須串列：Chrome 同時打多個 Google Script 會超時
         const ok = await testConnection();
+        await loadRemoteSettings();
         await loadMenus();
         populateDateSelects();
         renderMeals();
@@ -1069,6 +1070,12 @@
     let _submitting = false;
     async function submitOrder() {
       if (_submitting) { toast('正在提交，請稍候…'); return; }
+      const _od = document.getElementById('orderDate').value;
+      if (isOrderDateLocked(_od)) {
+        toast('🔒 此日已鎖定，不能再落單（' + (orderLockUntil || '') + ' 及之前）');
+        updateOrderLockBanner();
+        return;
+      }
       const initial = document.getElementById('userInitial').value.trim().toUpperCase();
       if (!initial) { toast('請輸入 Initial'); return; }
       if (!selectedMeal) { toast('請選擇飯餐'); return; }
@@ -1341,9 +1348,13 @@
         toast('找不到訂單');
         return;
       }
-      const canFree = isTodayOrFutureOrder(order);
+      const locked = isOrderDateLocked(order.date);
+      const canFree = isTodayOrFutureOrder(order) && !locked;
       if (!canFree) {
-        if (!requireAdminPin('刪除「過去日子」的訂單需要 PIN（避免誤刪）')) return;
+        const reason = locked
+          ? '此日已鎖定，刪除需要 PIN'
+          : '刪除「過去日子」的訂單需要 PIN（避免誤刪）';
+        if (!requireAdminPin(reason)) return;
       }
       const dlabel = order.date || '';
       const tip = canFree
@@ -1410,7 +1421,7 @@
         map[k].total += eff;
         map[k].count += 1;
         const d = normalizeDate(o.date) || o.date || '';
-        const bulkTag = (dayCounts[d] || 0) >= BULK_THRESHOLD ? ' (−2)' : '';
+        const bd = getBulkDiscount(dayCounts[d] || 0); const bulkTag = bd ? (' (−' + bd + ')') : '';
         map[k].details.push((o.date || '') + ' ' + (o.mealCode || '') + '.' + (o.mealName || '') + ' $' + eff + bulkTag);
       });
       const keys = Object.keys(map).sort();
@@ -1671,7 +1682,11 @@
 
 
     // ===================== 總覽 =====================
-    let pickupByDateMap = JSON.parse(localStorage.getItem('lunch_pickup_by_date') || '{}');
+    let pickupByDateMap = JSON.parse(localStorage.getItem('lunch_pickup_by_date') || '{}'); // 舊資料兼容
+    // 按星期：0=日 … 6=六
+    let pickupByWeekday = JSON.parse(localStorage.getItem('lunch_pickup_by_weekday') || '{}');
+    // 訂單鎖定：YYYY-MM-DD，該日及之前不可再落單／改單
+    let orderLockUntil = localStorage.getItem('lunch_order_lock_until') || '';
 
     async function loadOverview() {
       let orders = [];
@@ -1697,21 +1712,6 @@
       });
       const dates = Object.keys(byDate).sort();
       const today = toDateKey(new Date());
-
-      const sel = document.getElementById('pickupDateSelect');
-      if (sel) {
-        const prev = sel.value;
-        sel.innerHTML = dates.map(d => {
-          let label = d;
-          try { label = formatDateLabel(new Date(d + 'T12:00:00')); } catch (e) {}
-          return '<option value="' + d + '">' + label + '</option>';
-        }).join('');
-        if (dates.includes(prev)) sel.value = prev;
-        sel.onchange = function() {
-          document.getElementById('pickupByDate').value = pickupByDateMap[sel.value] || '';
-        };
-        if (dates.length) document.getElementById('pickupByDate').value = pickupByDateMap[sel.value] || '';
-      }
 
       const body = document.getElementById('overviewBody');
       const stats = document.getElementById('overviewStats');
@@ -1782,11 +1782,11 @@
         const chips = list.map(o =>
           `<span class="chip ${o.paid ? 'paid' : 'unpaid'}" title="${o.mealName||''}">${o.initial}${o.paid?'':' ·未付'}</span>`
         ).join('');
-        const pickup = pickupByDateMap[d] || '';
+        const pickup = getPickupForDate(d);
         return `<div class="day-card ${isToday ? 'today' : ''}">
           <div class="day-title">
             <span>${isToday ? '📍 ' : ''}${dateLabel}</span>
-            <span style="font-size:.85rem;color:var(--primary)">${n} 份${hasBulk ? ' ·滿5減' : ''}</span>
+            <span style="font-size:.85rem;color:var(--primary)">${n} 份${getBulkDiscount(n) ? ' ·' + getBulkLabel(n) : ''}</span>
           </div>
           <div class="day-meta">合計 <strong>$${sum}</strong> · 拎飯：<strong>${pickup || '未定'}</strong></div>
           <div class="people-chips">${chips}</div>
@@ -1802,9 +1802,13 @@
     function savePickupFromCard(d, btn) {
       const input = btn.parentNode.querySelector('.pickup-input');
       const person = (input && input.value || '').trim();
-      document.getElementById('pickupDateSelect').value = d;
-      document.getElementById('pickupByDate').value = person;
-      savePickupByDate();
+      const wd = getWeekdayKey(d);
+      pickupByWeekday[String(wd)] = person;
+      localStorage.setItem('lunch_pickup_by_weekday', JSON.stringify(pickupByWeekday));
+      refreshPickupDisplay();
+      if (apiUrl) callApi('setSetting', { key: 'pickup_by_weekday', value: JSON.stringify(pickupByWeekday) }).catch(()=>{});
+      toast('已更新 ' + WEEKDAY_LABELS[wd] + ' 拎飯人（每週循環）');
+      loadOverview();
     }
 
     async function savePickupByDate() {
@@ -1825,17 +1829,32 @@
         pickupPerson = person;
         localStorage.setItem('lunch_pickup', person);
         document.getElementById('pickupPerson').textContent = person || '未設定';
-        document.getElementById('adminPickup').value = person;
+        refreshPickupDisplay();
       }
       toast('已儲存 ' + d + ' 拎飯人：' + (person || '（清空）'));
       loadOverview();
     }
 
         // ===================== 匯出 WhatsApp =====================
+    function getBulkDiscount(dayCount) {
+      const n = Number(dayCount) || 0;
+      for (const tier of BULK_TIERS) {
+        if (n >= tier.min) return tier.discount;
+      }
+      return 0;
+    }
+
+    function getBulkLabel(dayCount) {
+      const d = getBulkDiscount(dayCount);
+      if (!d) return '';
+      const min = (BULK_TIERS.find(t => t.discount === d) || {}).min || BULK_THRESHOLD;
+      return `已達滿${min}份，每飯 −$${d}`;
+    }
+
     function getEffectiveTotal(order, dayCount) {
-      // dayCount = 當日總份數；滿5份則每飯減 $2
+      // dayCount = 當日總份數；階梯優惠 5/10/15 → −2/−4/−6
       let t = (order.mealPrice || 0) + (order.takeawayFee != null ? order.takeawayFee : TAKEAWAY_FEE) + (order.drinkPrice || 0);
-      if (dayCount >= BULK_THRESHOLD) t -= BULK_DISCOUNT;
+      t -= getBulkDiscount(dayCount);
       return Math.max(0, t);
     }
 
@@ -1925,8 +1944,9 @@
         }
 
         text += `\n共 ${dayCount} 份`;
-        if (hasBulk) {
-          text += `（已達滿${BULK_THRESHOLD}份，每飯 −$${BULK_DISCOUNT}）\n`;
+        const bulkLab = getBulkLabel(dayCount);
+        if (bulkLab) {
+          text += `（${bulkLab}）\n`;
         } else {
           text += `\n`;
         }
@@ -1935,11 +1955,80 @@
       text += `────────────────\n`;
       text += `備註：12:15-12:45 送到\n`;
       text += `放可譽中學門口，直行5-10步轉右走廊上的長枱（放外賣專用，電聯未必有人即時聽）\n`;
-      // 拎飯人：優先當日設定
-      const dayPickup = (typeof pickupByDateMap !== 'undefined' && pickupByDateMap[date]) || pickupPerson;
-      if (dayPickup) text += `拎飯人：${dayPickup}\n`;
 
       document.getElementById('exportText').value = text;
+    }
+
+
+    function isOrderDateLocked(dateStr) {
+      if (!orderLockUntil) return false;
+      const d = normalizeDate(dateStr) || dateStr || '';
+      if (!d) return false;
+      return d <= orderLockUntil;
+    }
+
+    function updateOrderLockBanner() {
+      const banner = document.getElementById('orderLockBanner');
+      const status = document.getElementById('orderLockStatus');
+      const orderDateEl = document.getElementById('orderDate');
+      const orderDate = orderDateEl ? orderDateEl.value : toDateKey(new Date());
+      if (status) {
+        status.textContent = orderLockUntil
+          ? ('目前已鎖定：' + orderLockUntil + ' 及之前的訂單')
+          : '目前未鎖定';
+        status.style.color = orderLockUntil ? 'var(--danger)' : 'var(--muted)';
+      }
+      if (banner) {
+        if (orderLockUntil && isOrderDateLocked(orderDate)) {
+          banner.style.display = 'block';
+          banner.innerHTML = '🔒 已落單鎖定：<strong>' + orderDate + '</strong> 及更早日子不可再新增／修改訂單（鎖定至 ' + orderLockUntil + '）。如需改動請聯絡負責人解除鎖定。';
+        } else if (orderLockUntil) {
+          banner.style.display = 'block';
+          banner.style.background = '#fffbeb';
+          banner.style.borderColor = '#fcd34d';
+          banner.style.color = '#92400e';
+          banner.innerHTML = 'ℹ️ 系統已鎖定 ' + orderLockUntil + ' 及之前；你選的日子仍可落單。';
+        } else {
+          banner.style.display = 'none';
+          banner.innerHTML = '';
+        }
+      }
+      // disable submit if locked
+      const btn = document.getElementById('submitBtn');
+      if (btn && orderDateEl) {
+        if (isOrderDateLocked(orderDateEl.value)) {
+          btn.disabled = true;
+          btn.textContent = '🔒 此日已鎖定，不能落單';
+        } else if (!_submitting) {
+          btn.disabled = false;
+          btn.textContent = '✅ 確認落單';
+        }
+      }
+    }
+
+    async function lockOrdersUntilExportDate() {
+      if (!requireAdminPin('鎖定訂單需要 PIN')) return;
+      const date = document.getElementById('exportDate').value || toDateKey(new Date());
+      if (!confirm('確定鎖定「' + date + '」及之前的所有訂單？\\n鎖定後同事不能再新增／修改／取消這些日子的訂單。')) return;
+      orderLockUntil = date;
+      localStorage.setItem('lunch_order_lock_until', orderLockUntil);
+      if (apiUrl) {
+        try { await callApi('setSetting', { key: 'order_lock_until', value: orderLockUntil }); } catch (e) { console.warn(e); }
+      }
+      updateOrderLockBanner();
+      toast('已鎖定 ' + date + ' 及之前');
+    }
+
+    async function unlockOrders() {
+      if (!requireAdminPin('解除鎖定需要 PIN')) return;
+      if (!confirm('確定解除訂單鎖定？')) return;
+      orderLockUntil = '';
+      localStorage.removeItem('lunch_order_lock_until');
+      if (apiUrl) {
+        try { await callApi('setSetting', { key: 'order_lock_until', value: '' }); } catch (e) { console.warn(e); }
+      }
+      updateOrderLockBanner();
+      toast('已解除鎖定');
     }
 
     function copyExport() {
@@ -1952,30 +2041,90 @@
     }
 
     // ===================== 拎飯人 =====================
+
+    const WEEKDAY_LABELS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+
+    function getWeekdayKey(dateStr) {
+      const d = dateStr ? new Date(dateStr + 'T12:00:00') : new Date();
+      if (isNaN(d.getTime())) return new Date().getDay();
+      return d.getDay(); // 0=Sun
+    }
+
+    function getPickupForDate(dateStr) {
+      const wd = getWeekdayKey(dateStr);
+      if (pickupByWeekday[String(wd)]) return pickupByWeekday[String(wd)];
+      if (pickupByWeekday[wd]) return pickupByWeekday[wd];
+      // 兼容舊「按日子」
+      const dk = normalizeDate(dateStr) || dateStr;
+      if (dk && pickupByDateMap[dk]) return pickupByDateMap[dk];
+      return pickupPerson || '';
+    }
+
+    function refreshPickupDisplay() {
+      const today = toDateKey(new Date());
+      const person = getPickupForDate(today);
+      pickupPerson = person;
+      const el = document.getElementById('pickupPerson');
+      if (el) el.textContent = person || '未設定';
+      const adm = document.getElementById('adminPickupToday');
+      if (adm) adm.textContent = person || '未設定';
+    }
+
+    function renderWeekdayPickupFields() {
+      // 工作日優先：一至五，再六日
+      const order = [1, 2, 3, 4, 5, 6, 0];
+      const html = order.map(wd => {
+        const val = pickupByWeekday[String(wd)] || pickupByWeekday[wd] || '';
+        return `<div class="row" style="margin-bottom:8px;align-items:center">
+          <div style="min-width:80px;font-weight:600">${WEEKDAY_LABELS[wd]}</div>
+          <div style="flex:1"><input type="text" class="weekday-pickup-input" data-wd="${wd}" value="${String(val).replace(/"/g, '&quot;')}" placeholder="Initial / 名字" /></div>
+        </div>`;
+      }).join('');
+      const a = document.getElementById('weekdayPickupFields');
+      const b = document.getElementById('weekdayPickupFieldsAdmin');
+      if (a) a.innerHTML = html;
+      if (b) b.innerHTML = html;
+    }
+
+    async function savePickupByWeekday() {
+      const inputs = document.querySelectorAll('.weekday-pickup-input');
+      // 兩邊 DOM 可能重複，用 Map 最後寫入為準
+      const map = {};
+      inputs.forEach(inp => {
+        map[String(inp.dataset.wd)] = (inp.value || '').trim();
+      });
+      pickupByWeekday = map;
+      localStorage.setItem('lunch_pickup_by_weekday', JSON.stringify(pickupByWeekday));
+      refreshPickupDisplay();
+      if (apiUrl) {
+        try {
+          await callApi('setSetting', { key: 'pickup_by_weekday', value: JSON.stringify(pickupByWeekday) });
+        } catch (e) { console.warn(e); }
+      }
+      toast('已儲存各星期拎飯人');
+      renderWeekdayPickupFields();
+      if (typeof loadOverview === 'function') {
+        try { loadOverview(); } catch (e) {}
+      }
+    }
+
     function editPickup() {
-      const v = prompt('輸入今日負責拎飯的人（Initial 或名字）', pickupPerson);
+      const wd = getWeekdayKey();
+      const cur = getPickupForDate(toDateKey(new Date()));
+      const v = prompt('設定「' + WEEKDAY_LABELS[wd] + '」拎飯人（每週循環）', cur);
       if (v !== null) {
-        pickupPerson = v.trim();
-        localStorage.setItem('lunch_pickup', pickupPerson);
-        document.getElementById('pickupPerson').textContent = pickupPerson || '未設定';
-        document.getElementById('adminPickup').value = pickupPerson;
-        if (apiUrl) callApi('setSetting', { key: 'pickup', value: pickupPerson }).catch(()=>{});
-        toast('已更新拎飯人');
+        pickupByWeekday[String(wd)] = v.trim();
+        localStorage.setItem('lunch_pickup_by_weekday', JSON.stringify(pickupByWeekday));
+        refreshPickupDisplay();
+        renderWeekdayPickupFields();
+        if (apiUrl) callApi('setSetting', { key: 'pickup_by_weekday', value: JSON.stringify(pickupByWeekday) }).catch(()=>{});
+        toast('已更新 ' + WEEKDAY_LABELS[wd] + ' 拎飯人');
       }
     }
 
     function savePickup() {
-      pickupPerson = document.getElementById('adminPickup').value.trim();
-      localStorage.setItem('lunch_pickup', pickupPerson);
-      document.getElementById('pickupPerson').textContent = pickupPerson || '未設定';
-      const today = toDateKey(new Date());
-      pickupByDateMap[today] = pickupPerson;
-      localStorage.setItem('lunch_pickup_by_date', JSON.stringify(pickupByDateMap));
-      if (apiUrl) {
-        callApi('setSetting', { key: 'pickup', value: pickupPerson }).catch(()=>{});
-        callApi('setSetting', { key: 'pickup_' + today, value: pickupPerson }).catch(()=>{});
-      }
-      toast('已儲存');
+      // 改為按星期儲存（見 savePickupByWeekday）
+      savePickupByWeekday();
     }
 
     // ===================== 菜單匯入 =====================
@@ -2095,6 +2244,29 @@
 
     function delay(ms) {
       return new Promise(r => setTimeout(r, ms));
+    }
+
+
+    async function loadRemoteSettings() {
+      if (!apiUrl) return;
+      try {
+        // 嘗試從 getSetting 讀（若 script 支援）
+        const lock = await callApi('getSetting', { key: 'order_lock_until' }).catch(() => null);
+        if (lock != null && lock !== '') {
+          orderLockUntil = String(lock);
+          localStorage.setItem('lunch_order_lock_until', orderLockUntil);
+        }
+        const wd = await callApi('getSetting', { key: 'pickup_by_weekday' }).catch(() => null);
+        if (wd) {
+          try {
+            pickupByWeekday = typeof wd === 'string' ? JSON.parse(wd) : wd;
+            localStorage.setItem('lunch_pickup_by_weekday', JSON.stringify(pickupByWeekday));
+          } catch (e) {}
+        }
+      } catch (e) { console.warn(e); }
+      refreshPickupDisplay();
+      renderWeekdayPickupFields();
+      updateOrderLockBanner();
     }
 
     async function testConnection() {
