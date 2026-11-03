@@ -1920,18 +1920,25 @@
         const dayCount = orders.length;
         const hasBulk = dayCount >= BULK_THRESHOLD;
 
-        // 按 meal 汇总数量
+        // 按 meal + 備註 匯總（備註附在飯名後，唔顯示同事名）
         const mealCount = {};
         orders.forEach(o => {
-          const key = `${o.mealCode}. ${o.mealName}`;
-          mealCount[key] = (mealCount[key] || 0) + 1;
+          let label = `${o.mealCode}. ${o.mealName}`;
+          let note = (o.note && String(o.note).trim()) || '';
+          // 「選項:xxx」若已寫入 mealName 就唔重複
+          if (note.startsWith('選項:')) {
+            const opt = note.slice(3).trim();
+            if (o.mealName && o.mealName.indexOf(opt) >= 0) note = '';
+            else note = opt; // 只保留選項內容
+          }
+          if (note) label += `（${note}）`;
+          mealCount[label] = (mealCount[label] || 0) + 1;
         });
         Object.entries(mealCount).forEach(([k, v]) => {
           text += `${v} × ${k}\n`;
         });
 
         // 飲品：同類合併；正常冰／正常糖唔寫
-        // 例：凍檸茶（正常・少糖）→ 凍檸茶(少糖)；凍奶茶（正常・正常）→ 凍奶茶
         const drinkCount = {};
         orders.forEach(o => {
           if (!o.drink) return;
@@ -1945,16 +1952,6 @@
           drinkKeys.forEach(k => {
             const n = drinkCount[k];
             text += n > 1 ? `• ${k} ×${n}\n` : `• ${k}\n`;
-          });
-        }
-
-
-        // 備註（有寫先顯示）
-        const notes = orders.filter(o => o.note && String(o.note).trim());
-        if (notes.length) {
-          text += `\n備註：\n`;
-          notes.forEach(o => {
-            text += `• ${o.initial}: ${String(o.note).trim()}\n`;
           });
         }
 
