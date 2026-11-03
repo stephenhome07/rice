@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
-  <title>HO YU PANDA V1.10</title>
+  <title>HO YU PANDA V1.07</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
@@ -278,11 +278,11 @@
         <label>飲品</label>
         <select id="drinkSelect">
           <option value="">— 唔要飲品 —</option>
-          <option value="凍檸茶">凍檸茶（+$2）</option>
-          <option value="凍奶茶">凍奶茶（+$2）</option>
-          <option value="凍咖啡">凍咖啡（+$2）</option>
-          <option value="凍鴛鴦">凍鴛鴦（+$2）</option>
-          <option value="凍柠檬可乐">凍柠檬可樂（+$2）</option>
+          <option value="凍檸茶">凍檸茶（+$3）</option>
+          <option value="凍奶茶">凍奶茶（+$3）</option>
+          <option value="凍咖啡">凍咖啡（+$3）</option>
+          <option value="凍鴛鴦">凍鴛鴦（+$3）</option>
+          <option value="凍柠檬可乐">凍柠檬可樂（+$3）</option>
           <option value="熱奶茶">熱奶茶（免費）</option>
           <option value="熱咖啡">熱咖啡（免費）</option>
           <option value="熱鴛鴦">熱鴛鴦（免費）</option>
@@ -327,7 +327,7 @@
           <div class="summary-row total"><span>合計</span><span id="sumTotal">$0</span></div>
         </div>
         <p style="font-size:.8rem;color:var(--muted);margin-top:8px">
-          飲品免費　·　凍飲另加 $2　·　每單外賣 +$1　·　當日滿5/10/15份每飯 −$2/$4/$6（結算時自動計）
+          飲品免費　·　凍飲另加 $3　·　每單外賣 +$1　·　當日滿5/10/15份每飯 −$2/$4/$6（結算時自動計）
         </p>
         <label style="margin-top:12px">備註（可選）</label>
         <input type="text" id="orderNote" placeholder="例如 少油 / 多飯" />
@@ -529,9 +529,9 @@
     let SET_MENUS = [];      // 固定套餐（每日）
     let menusLoaded = false;
 
-    // 飲品免費；只有凍飲 +$2
+    // 飲品免費；只有凍飲 +$3
     const TAKEAWAY_FEE = 1;   // 每單外賣 +$1
-    const COLD_EXTRA = 2;     // 凍飲額外 +$2
+    const COLD_EXTRA = 3;     // 凍飲額外 +$3
     // 批量優惠：滿5 −$2、滿10 −$4、滿15 −$6（每飯）
     const BULK_TIERS = [
       { min: 15, discount: 6 },
@@ -1025,7 +1025,7 @@
     }
 
     function getDrinkPrice(drink) {
-      // 飲品免費；只有凍飲另加 $2
+      // 飲品免費；只有凍飲另加 $3
       if (!drink) return 0;
       if (drink.startsWith('凍')) return COLD_EXTRA;
       return 0;
@@ -1214,10 +1214,13 @@
         const priceLabel = bulkDisc && eff !== Number(o.total)
           ? `$${eff}<br><small style="color:#999;text-decoration:line-through">$${o.total}</small>`
           : `$${o.total}`;
+        const noteHtml = o.note
+          ? `<br><small style="color:#b45309">📝 ${String(o.note).replace(/</g,'&lt;')}</small>`
+          : '';
         return `
         <tr>
           <td><strong>${o.initial}</strong>${o.name ? '<br><small>'+o.name+'</small>' : ''}</td>
-          <td>${o.mealCode}. ${o.mealName}</td>
+          <td>${o.mealCode}. ${o.mealName}${noteHtml}</td>
           <td>${o.drink || '—'}</td>
           <td>${priceLabel}</td>
           <td>
@@ -1617,9 +1620,10 @@
         const priceCell = hasBulk && !o.paid
           ? `$${eff}<br><small style="color:#999;text-decoration:line-through">$${o.total}</small>`
           : `$${eff}`;
+        const noteBit = o.note ? `<br><small style="color:#b45309">📝 ${String(o.note).replace(/</g,'&lt;')}</small>` : '';
         return `<tr>
           <td>${dateLabel}<br>${tag}</td>
-          <td>${o.mealCode}. ${o.mealName}</td>
+          <td>${o.mealCode}. ${o.mealName}${noteBit}</td>
           <td>${o.drink || '—'}</td>
           <td>${priceCell}</td>
           <td><span class="badge ${o.paid ? 'badge-paid' : 'badge-unpaid'}">${o.paid ? '已付' : '未付'}</span></td>
@@ -1941,6 +1945,16 @@
           drinkKeys.forEach(k => {
             const n = drinkCount[k];
             text += n > 1 ? `• ${k} ×${n}\n` : `• ${k}\n`;
+          });
+        }
+
+
+        // 備註（有寫先顯示）
+        const notes = orders.filter(o => o.note && String(o.note).trim());
+        if (notes.length) {
+          text += `\n備註：\n`;
+          notes.forEach(o => {
+            text += `• ${o.initial}: ${String(o.note).trim()}\n`;
           });
         }
 
