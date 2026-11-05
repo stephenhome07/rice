@@ -288,6 +288,7 @@
           <option value="熱鴛鴦">熱鴛鴦（免費）</option>
           <option value="熱檸茶">熱檸茶（免費）</option>
           <option value="熱水">熱水（免費）</option>
+          <option value="津路烏龍茶">津路烏龍茶（+$5 升級）</option>
           <option value="其他">其他（免費，備註寫明）</option>
         </select>
         <div class="drink-opts" id="drinkOpts" style="display:none">
@@ -327,7 +328,7 @@
           <div class="summary-row total"><span>合計</span><span id="sumTotal">$0</span></div>
         </div>
         <p style="font-size:.8rem;color:var(--muted);margin-top:8px">
-          飲品免費　·　凍飲另加 $3　·　每單外賣 +$1　·　當日滿5/10/15份每飯 −$2/$4/$6（結算時自動計）
+          飲品免費　·　凍飲另加 $3　·　津路烏龍茶 +$5（套餐升級）　·　每單外賣 +$1　·　當日滿5/10/15份每飯 −$2/$4/$6
         </p>
         <label style="margin-top:12px">備註（可選）</label>
         <input type="text" id="orderNote" placeholder="例如 少油 / 多飯" />
@@ -532,6 +533,7 @@
     // 飲品免費；只有凍飲 +$3
     const TAKEAWAY_FEE = 1;   // 每單外賣 +$1
     const COLD_EXTRA = 3;     // 凍飲額外 +$3
+    const BOTTLE_TEA_EXTRA = 5; // 津路烏龍茶升級 +$5
     // 批量優惠：滿5 −$2、滿10 −$4、滿15 −$6（每飯）
     const BULK_TIERS = [
       { min: 15, discount: 6 },
@@ -684,7 +686,9 @@
     function setupDrinkToggle() {
       document.getElementById('drinkSelect').addEventListener('change', () => {
         const v = document.getElementById('drinkSelect').value;
-        document.getElementById('drinkOpts').style.display = v ? 'grid' : 'none';
+        // 只有凍飲先要冰量／甜度；樽裝烏龍茶唔使
+        const needOpts = v && v.startsWith('凍');
+        document.getElementById('drinkOpts').style.display = needOpts ? 'grid' : 'none';
         calcPrice();
         // 即時記住（改飲品時）
         saveDrinkPrefFromForm();
@@ -1025,8 +1029,9 @@
     }
 
     function getDrinkPrice(drink) {
-      // 飲品免費；只有凍飲另加 $3
+      // 飲品免費；凍飲 +$3；津路烏龍茶 +$5
       if (!drink) return 0;
+      if (drink === '津路烏龍茶' || drink.indexOf('津路') >= 0) return BOTTLE_TEA_EXTRA;
       if (drink.startsWith('凍')) return COLD_EXTRA;
       return 0;
     }
@@ -1040,7 +1045,7 @@
       document.getElementById('sumMeal').textContent = '$' + mealP;
       document.getElementById('sumTakeaway').textContent = takeaway ? '+$' + takeaway : '$0';
       document.getElementById('sumDrink').textContent = drinkP
-        ? ('+$' + drinkP + '（凍飲）')
+        ? ('+$' + drinkP + (drink.indexOf('津路') >= 0 ? '（烏龍茶升級）' : '（凍飲）'))
         : (drink ? '免費' : '$0');
       document.getElementById('sumTotal').textContent = '$' + total;
       document.getElementById('bulkHintRow').style.display = 'none';
