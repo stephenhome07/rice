@@ -371,7 +371,11 @@
     <div class="panel" id="panel-overview">
       <div class="card">
         <h2>訂單總覽</h2>
-        <div class="filter-bar">
+        <div class="filter-bar" style="flex-wrap:wrap;gap:8px;align-items:center">
+          <label style="font-size:.85rem">月份</label>
+          <select id="overviewMonth" onchange="loadOverview()" style="min-width:140px">
+            <option value="">全部月份</option>
+          </select>
           <button class="btn btn-secondary" onclick="loadOverview()">重新整理</button>
         </div>
         <div class="status-bar" id="overviewStats"></div>
@@ -621,21 +625,36 @@
     }
 
     function toDateKey(d) {
-      return d.toISOString().slice(0,10);
+      // 用本地時區（香港），避免 toISOString UTC 差一日
+      const x = d instanceof Date ? d : new Date(d);
+      const y = x.getFullYear();
+      const m = String(x.getMonth() + 1).padStart(2, '0');
+      const day = String(x.getDate()).padStart(2, '0');
+      return y + '-' + m + '-' + day;
     }
 
     function populateDateSelects() {
       // 只顯示真正日子（排除 * / FIXED / 每天）
-      const dates = Object.keys(MENUS).filter(d => d && d !== '*' && d !== 'FIXED' && d !== '每天').sort();
-      const selects = ['orderDate','filterDate','exportDate'];
-      selects.forEach(id => {
+      const allDates = Object.keys(MENUS).filter(d => d && d !== '*' && d !== 'FIXED' && d !== '每天').sort();
+      const today = toDateKey(new Date());
+      // 落單：只今日及以後；今日訂單／匯出：可睇歷史
+      const bySelect = {
+        orderDate: allDates.filter(d => d >= today),
+        filterDate: allDates.slice(),
+        exportDate: allDates.slice()
+      };
+      Object.keys(bySelect).forEach(id => {
         const sel = document.getElementById(id);
+        if (!sel) return;
         const prev = sel.value;
+        const dates = bySelect[id];
         sel.innerHTML = '';
         if (!dates.length) {
           const opt = document.createElement('option');
           opt.value = '';
-          opt.textContent = '（未載入菜單，請設定 Google Sheet）';
+          opt.textContent = id === 'orderDate'
+            ? '（沒有今日或之後的菜單）'
+            : '（未載入菜單，請設定 Google Sheet）';
           sel.appendChild(opt);
           return;
         }
@@ -643,19 +662,37 @@
           const d = new Date(dk + 'T12:00:00');
           const opt = document.createElement('option');
           opt.value = dk;
-          opt.textContent = isNaN(d.getTime()) ? dk : formatDateLabel(d);
+          let label = isNaN(d.getTime()) ? dk : formatDateLabel(d);
+          if (id === 'orderDate' && orderLockUntil && dk <= orderLockUntil) {
+            label += ' 🔒已鎖定';
+          }
+          opt.textContent = label;
+          if (id === 'orderDate' && orderLockUntil && dk <= orderLockUntil) {
+            opt.disabled = true;
+          }
           sel.appendChild(opt);
         });
-        const today = toDateKey(new Date());
-        if (dates.includes(prev)) sel.value = prev;
-        else if (dates.includes(today)) sel.value = today;
-        else {
+        // 預設：今日（若未鎖）或下一個可選日子
+        if (dates.includes(prev) && !(id === 'orderDate' && orderLockUntil && prev <= orderLockUntil)) {
+          sel.value = prev;
+        } else if (id === 'orderDate') {
+          const pick = dates.find(d => !orderLockUntil || d > orderLockUntil) || dates.find(d => d >= today) || dates[0];
+          sel.value = pick || '';
+        } else if (dates.includes(today)) {
+          sel.value = today;
+        } else {
           const future = dates.find(d => d >= today);
           sel.value = future || dates[dates.length - 1];
         }
       });
       const od = document.getElementById('orderDate');
-      od.onchange = renderMeals;
+      if (od) {
+        od.onchange = function() {
+          renderMeals();
+          updateOrderLockBanner();
+        };
+      }
+      updateOrderLockBanner();
     }
 
     function populateInitials() {
@@ -675,6 +712,7 @@
           document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
           tab.classList.add('active');
           document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+          if (tab.dataset.tab === 'order') { loadRemoteSettings(); updateOrderLockBanner(); }
           if (tab.dataset.tab === 'orders') loadOrders();
           if (tab.dataset.tab === 'overview') loadOverview();
           if (tab.dataset.tab === 'payment') loadDebts();
@@ -1075,10 +1113,15 @@
     let _submitting = false;
     async function submitOrder() {
       if (_submitting) { toast('正在提交，請稍候…'); return; }
+      // 提交前再拉一次鎖定狀態（避免其他裝置已鎖但本機未更新）
+      if (apiUrl) {
+        try { await loadRemoteSettings(); } catch (e) {}
+      }
       const _od = document.getElementById('orderDate').value;
       if (isOrderDateLocked(_od)) {
         toast('🔒 此日已鎖定，不能再落單（' + (orderLockUntil || '') + ' 及之前）');
         updateOrderLockBanner();
+        populateDateSelects();
         return;
       }
       const initial = document.getElementById('userInitial').value.trim().toUpperCase();
@@ -1720,8 +1763,28 @@
         if (!byDate[d]) byDate[d] = [];
         byDate[d].push(o);
       });
-      const dates = Object.keys(byDate).sort();
+      let dates = Object.keys(byDate).sort();
       const today = toDateKey(new Date());
+
+      // 月份下拉
+      const monthSel = document.getElementById('overviewMonth');
+      if (monthSel) {
+        const months = [...new Set(dates.map(d => d.slice(0, 7)).filter(Boolean))].sort().reverse();
+        const prevM = monthSel.value;
+        monthSel.innerHTML = '<option value="">全部月份</option>' +
+          months.map(m => {
+            const [y, mo] = m.split('-');
+            return '<option value="' + m + '">' + y + '年' + parseInt(mo, 10) + '月</option>';
+          }).join('');
+        if (months.includes(prevM)) monthSel.value = prevM;
+        else if (!prevM && months.length) {
+          // 預設當月（有資料就選）
+          const thisM = today.slice(0, 7);
+          monthSel.value = months.includes(thisM) ? thisM : months[0];
+        }
+        const mf = monthSel.value;
+        if (mf) dates = dates.filter(d => d.startsWith(mf));
+      }
 
       const body = document.getElementById('overviewBody');
       const stats = document.getElementById('overviewStats');
@@ -1979,9 +2042,11 @@
 
     function isOrderDateLocked(dateStr) {
       if (!orderLockUntil) return false;
-      const d = normalizeDate(dateStr) || dateStr || '';
-      if (!d) return false;
-      return d <= orderLockUntil;
+      const d = (normalizeDate(dateStr) || dateStr || '').substring(0, 10);
+      const lock = String(orderLockUntil).substring(0, 10);
+      if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(lock)) return false;
+      return d <= lock;
     }
 
     function updateOrderLockBanner() {
@@ -2033,7 +2098,8 @@
         try { await callApi('setSetting', { key: 'order_lock_until', value: orderLockUntil }); } catch (e) { console.warn(e); }
       }
       updateOrderLockBanner();
-      toast('已鎖定 ' + date + ' 及之前');
+      try { populateDateSelects(); } catch (e) {}
+      toast('已鎖定 ' + date + ' 及之前（已同步到 Google Sheet，其他裝置重新整理後生效）');
     }
 
     async function unlockOrders() {
@@ -2045,6 +2111,7 @@
         try { await callApi('setSetting', { key: 'order_lock_until', value: '' }); } catch (e) { console.warn(e); }
       }
       updateOrderLockBanner();
+      try { populateDateSelects(); } catch (e) {}
       toast('已解除鎖定');
     }
 
@@ -2265,13 +2332,23 @@
 
 
     async function loadRemoteSettings() {
-      if (!apiUrl) return;
+      if (!apiUrl) {
+        updateOrderLockBanner();
+        return;
+      }
       try {
-        // 嘗試從 getSetting 讀（若 script 支援）
         const lock = await callApi('getSetting', { key: 'order_lock_until' }).catch(() => null);
-        if (lock != null && lock !== '') {
-          orderLockUntil = String(lock);
-          localStorage.setItem('lunch_order_lock_until', orderLockUntil);
+        // 以 Sheet 為準：有值就鎖，空字串就解鎖（同步所有裝置）
+        if (lock !== null && lock !== undefined) {
+          const v = String(lock).trim();
+          // 有時 API 回傳 { ok:true } 物件，忽略
+          if (v && v !== '[object Object]' && /^\d{4}-\d{2}-\d{2}/.test(v)) {
+            orderLockUntil = v.substring(0, 10);
+            localStorage.setItem('lunch_order_lock_until', orderLockUntil);
+          } else if (v === '' || v === 'null' || v === 'undefined') {
+            orderLockUntil = '';
+            localStorage.removeItem('lunch_order_lock_until');
+          }
         }
         const wd = await callApi('getSetting', { key: 'pickup_by_weekday' }).catch(() => null);
         if (wd) {
@@ -2284,6 +2361,10 @@
       refreshPickupDisplay();
       renderWeekdayPickupFields();
       updateOrderLockBanner();
+      // 鎖定狀態可能影響日子選單
+      if (typeof MENUS !== 'undefined' && Object.keys(MENUS).length) {
+        try { populateDateSelects(); } catch (e) {}
+      }
     }
 
     async function testConnection() {
