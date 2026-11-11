@@ -287,6 +287,7 @@
           <option value="熱咖啡">熱咖啡（免費）</option>
           <option value="熱鴛鴦">熱鴛鴦（免費）</option>
           <option value="熱檸茶">熱檸茶（免費）</option>
+          <option value="熱檸水">熱檸水（免費）</option>
           <option value="熱水">熱水（免費）</option>
           <option value="津路烏龍茶">津路烏龍茶（+$5 升級）</option>
           <option value="其他">其他（免費，備註寫明）</option>
@@ -332,6 +333,15 @@
         </p>
         <label style="margin-top:12px">備註（可選）</label>
         <input type="text" id="orderNote" placeholder="例如 少油 / 多飯" />
+        <label style="margin-top:12px">包裝（分開包裝用）</label>
+        <select id="orderPack">
+          <option value="1" selected>包裝 1（預設）</option>
+          <option value="2">包裝 2</option>
+          <option value="3">包裝 3</option>
+          <option value="4">包裝 4</option>
+          <option value="5">包裝 5</option>
+        </select>
+        <p style="font-size:.75rem;color:var(--muted);margin-top:4px">預設包裝 1；只有需要分開先選 2–5。匯出時若全部都係包裝 1 就唔會顯示包裝字眼。</p>
         <button class="btn btn-primary btn-block" style="margin-top:14px" id="submitBtn" onclick="submitOrder()">
           ✅ 確認落單
         </button>
@@ -663,20 +673,18 @@
           const opt = document.createElement('option');
           opt.value = dk;
           let label = isNaN(d.getTime()) ? dk : formatDateLabel(d);
-          if (id === 'orderDate' && orderLockUntil && dk <= orderLockUntil) {
+          if (id === 'orderDate' && isOrderDateLocked(dk)) {
             label += ' 🔒已鎖定';
-          }
-          opt.textContent = label;
-          if (id === 'orderDate' && orderLockUntil && dk <= orderLockUntil) {
             opt.disabled = true;
           }
+          opt.textContent = label;
           sel.appendChild(opt);
         });
         // 預設：今日（若未鎖）或下一個可選日子
-        if (dates.includes(prev) && !(id === 'orderDate' && orderLockUntil && prev <= orderLockUntil)) {
+        if (dates.includes(prev) && !(id === 'orderDate' && isOrderDateLocked(prev))) {
           sel.value = prev;
         } else if (id === 'orderDate') {
-          const pick = dates.find(d => !orderLockUntil || d > orderLockUntil) || dates.find(d => d >= today) || dates[0];
+          const pick = dates.find(d => !isOrderDateLocked(d)) || dates.find(d => d >= today) || dates[0];
           sel.value = pick || '';
         } else if (dates.includes(today)) {
           sel.value = today;
@@ -1156,6 +1164,12 @@
         if (drinkNote) drinkStr += ` ${drinkNote}`;
       }
 
+      const packEl = document.getElementById('orderPack');
+      const pack = Math.min(5, Math.max(1, parseInt(packEl && packEl.value ? packEl.value : '1', 10) || 1));
+      const baseNote = note || (setOpt ? '選項:' + setOpt : '');
+      // 包裝>1 時寫入 note 前綴，方便 Sheet 無 pack 欄都能還原
+      const noteStored = (pack > 1 ? ('【包裝' + pack + '】') : '') + (baseNote || '');
+
       const order = {
         id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
         timestamp: new Date().toISOString(),
@@ -1170,7 +1184,8 @@
         drinkPrice: drinkP,
         total,
         paid: false,
-        note: note || (setOpt ? '選項:' + setOpt : '')
+        pack: pack,
+        note: noteStored
       };
 
       // 記住 initial
@@ -1211,6 +1226,8 @@
       document.querySelectorAll('input[name="meal"]').forEach(r => r.checked = false);
       selectedMeal = null;
       document.getElementById('orderNote').value = '';
+      const packReset = document.getElementById('orderPack');
+      if (packReset) packReset.value = '1';
       applyDrinkPrefForInitial();
       calcPrice();
       } finally {
@@ -1262,13 +1279,15 @@
         const priceLabel = bulkDisc && eff !== Number(o.total)
           ? `$${eff}<br><small style="color:#999;text-decoration:line-through">$${o.total}</small>`
           : `$${o.total}`;
-        const noteHtml = o.note
-          ? `<br><small style="color:#b45309">📝 ${String(o.note).replace(/</g,'&lt;')}</small>`
+        const noteShow = stripPackPrefix(o.note);
+        const packShow = (o.pack && o.pack > 1) ? ` <small style="color:#6366f1">📦包裝${o.pack}</small>` : '';
+        const noteHtml = noteShow
+          ? `<br><small style="color:#b45309">📝 ${noteShow.replace(/</g,'&lt;')}</small>`
           : '';
         return `
         <tr>
           <td><strong>${o.initial}</strong>${o.name ? '<br><small>'+o.name+'</small>' : ''}</td>
-          <td>${o.mealCode}. ${o.mealName}${noteHtml}</td>
+          <td>${o.mealCode}. ${o.mealName}${packShow}${noteHtml}</td>
           <td>${o.drink || '—'}</td>
           <td>${priceLabel}</td>
           <td>
@@ -1298,8 +1317,23 @@
         drinkPrice: Number(o.drinkPrice) || 0,
         total: Number(o.total) || 0,
         paid: o.paid === true || o.paid === 'TRUE' || o.paid === 'true',
-        note: o.note || ''
+        note: o.note || '',
+        pack: parsePackNumber(o)
       };
+    }
+
+    function parsePackNumber(o) {
+      if (!o) return 1;
+      if (o.pack != null && o.pack !== '') {
+        const n = parseInt(o.pack, 10);
+        if (n >= 1 && n <= 5) return n;
+      }
+      const m = String(o.note || '').match(/^【包裝([1-5])】/);
+      return m ? parseInt(m[1], 10) : 1;
+    }
+
+    function stripPackPrefix(note) {
+      return String(note || '').replace(/^【包裝[1-5]】/, '').trim();
     }
 
 
@@ -1988,38 +2022,54 @@
         const dayCount = orders.length;
         const hasBulk = dayCount >= BULK_THRESHOLD;
 
-        // 按 meal + 備註 匯總（備註附在飯名後，唔顯示同事名）
-        const mealCount = {};
-        orders.forEach(o => {
-          let label = `${o.mealCode}. ${o.mealName}`;
-          let note = (o.note && String(o.note).trim()) || '';
-          // 「選項:xxx」若已寫入 mealName 就唔重複
-          if (note.startsWith('選項:')) {
-            const opt = note.slice(3).trim();
-            if (o.mealName && o.mealName.indexOf(opt) >= 0) note = '';
-            else note = opt; // 只保留選項內容
-          }
-          if (note) label += `（${note}）`;
-          mealCount[label] = (mealCount[label] || 0) + 1;
-        });
-        Object.entries(mealCount).forEach(([k, v]) => {
-          text += `${v} × ${k}\n`;
-        });
+        // 包裝：若全部係包裝1 → 唔顯示包裝字眼；有 2+ 先分組
+        const packsUsed = [...new Set(orders.map(o => parsePackNumber(o)))].sort((a,b) => a-b);
+        const multiPack = packsUsed.some(p => p > 1) || packsUsed.length > 1;
 
-        // 飲品：同類合併；正常冰／正常糖唔寫
-        const drinkCount = {};
-        orders.forEach(o => {
-          if (!o.drink) return;
-          const key = formatDrinkForExport(o.drink);
-          if (!key) return;
-          drinkCount[key] = (drinkCount[key] || 0) + 1;
-        });
-        const drinkKeys = Object.keys(drinkCount);
-        if (drinkKeys.length) {
-          text += `\n飲品：\n`;
-          drinkKeys.forEach(k => {
-            const n = drinkCount[k];
-            text += n > 1 ? `• ${k} ×${n}\n` : `• ${k}\n`;
+        function appendMealsAndDrinks(list, prefix) {
+          let block = prefix || '';
+          const mealCount = {};
+          list.forEach(o => {
+            let label = `${o.mealCode}. ${o.mealName}`;
+            let note = stripPackPrefix(o.note);
+            if (note.startsWith('選項:')) {
+              const opt = note.slice(3).trim();
+              if (o.mealName && o.mealName.indexOf(opt) >= 0) note = '';
+              else note = opt;
+            }
+            if (note) label += `（${note}）`;
+            mealCount[label] = (mealCount[label] || 0) + 1;
+          });
+          Object.entries(mealCount).forEach(([k, v]) => {
+            block += `${v} × ${k}\n`;
+          });
+          const drinkCount = {};
+          list.forEach(o => {
+            if (!o.drink) return;
+            const key = formatDrinkForExport(o.drink);
+            if (!key) return;
+            drinkCount[key] = (drinkCount[key] || 0) + 1;
+          });
+          const drinkKeys = Object.keys(drinkCount);
+          if (drinkKeys.length) {
+            block += `\n飲品：\n`;
+            drinkKeys.forEach(k => {
+              const n = drinkCount[k];
+              block += n > 1 ? `• ${k} ×${n}\n` : `• ${k}\n`;
+            });
+          }
+          return block;
+        }
+
+        if (!multiPack) {
+          text += appendMealsAndDrinks(orders, '');
+        } else {
+          packsUsed.forEach((p, idx) => {
+            const list = orders.filter(o => parsePackNumber(o) === p);
+            if (!list.length) return;
+            if (idx > 0) text += `\n`;
+            text += `【包裝${p}】\n`;
+            text += appendMealsAndDrinks(list, '');
           });
         }
 
@@ -2043,9 +2093,14 @@
     function isOrderDateLocked(dateStr) {
       if (!orderLockUntil) return false;
       const d = (normalizeDate(dateStr) || dateStr || '').substring(0, 10);
-      const lock = String(orderLockUntil).substring(0, 10);
+      let lock = String(orderLockUntil).substring(0, 10);
       if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(lock)) return false;
+      const today = toDateKey(new Date());
+      // 安全：不可鎖「未來」日子（避免誤鎖全部預訂單）
+      if (d > today) return false;
+      // lock 若異常大於今日，只當鎖到今日
+      if (lock > today) lock = today;
       return d <= lock;
     }
 
@@ -2090,8 +2145,15 @@
 
     async function lockOrdersUntilExportDate() {
       if (!requireAdminPin('鎖定訂單需要 PIN')) return;
-      const date = document.getElementById('exportDate').value || toDateKey(new Date());
-      if (!confirm('確定鎖定「' + date + '」及之前的所有訂單？\\n鎖定後同事不能再新增／修改／取消這些日子的訂單。')) return;
+      const today = toDateKey(new Date());
+      let date = document.getElementById('exportDate').value || today;
+      date = (normalizeDate(date) || date || today).substring(0, 10);
+      // 只可鎖到「今日」為止，唔會鎖未來預訂單
+      if (date > today) {
+        toast('所選日子係未來，鎖定會改為只鎖到今日（' + today + '）');
+        date = today;
+      }
+      if (!confirm('確定鎖定「' + date + '」及之前的訂單？\n（未來日子仍可預先落訂）\n鎖定後同事不能再新增／修改這些日子的訂單。')) return;
       orderLockUntil = date;
       localStorage.setItem('lunch_order_lock_until', orderLockUntil);
       if (apiUrl) {
