@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
-  <title>HO YU PANDA V1.08</title>
+  <title>HO YU PANDA V1.07</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
@@ -95,6 +95,21 @@
       border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 14px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    .panel-loading {
+      text-align: center; padding: 28px 16px; color: var(--muted);
+      background: #faf8f5; border-radius: 10px; border: 1px dashed var(--border);
+      margin: 8px 0;
+    }
+    .panel-loading .spinner {
+      width: 28px; height: 28px; border: 3px solid #f0ebe3; border-top-color: var(--primary);
+      border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 10px;
+    }
+    .panel-loading strong { display: block; color: var(--text); margin-bottom: 4px; }
+    .status-bar.loading-hint {
+      opacity: .7; font-style: italic;
+    }
+
     .btn-primary:disabled, #submitBtn:disabled {
       opacity: .65; cursor: not-allowed; pointer-events: none;
     }
@@ -1491,24 +1506,54 @@
     }
 
     // ===================== 訂單列表 =====================
+    let _loadOrdersSeq = 0;
+    let _loadOverviewSeq = 0;
+    let _loadDebtsSeq = 0;
+
+    function loadingHtml(msg) {
+      return '<div class="panel-loading"><div class="spinner"></div><strong>' +
+        (msg || '載入中…') + '</strong><span style="font-size:.85rem">請稍候，資料更新中</span></div>';
+    }
+
     async function loadOrders() {
       const date = document.getElementById('filterDate').value;
+      const tbody = document.getElementById('ordersBody');
+      const stats = document.getElementById('orderStats');
+      const seq = ++_loadOrdersSeq;
+
+      // 即時清空舊資料 + 顯示 loading，避免同事以為仍係舊日子
+      if (stats) {
+        stats.className = 'status-bar loading-hint';
+        let dateLabel = date || '';
+        try { if (date) dateLabel = formatDateLabel(new Date(date + 'T12:00:00')); } catch (e) {}
+        stats.innerHTML = '<div class="status-item">⏳ 正在載入 ' + (dateLabel || '訂單') + '…</div>';
+      }
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="6">' + loadingHtml('載入訂單中') + '</td></tr>';
+      }
+      const filterSel = document.getElementById('filterDate');
+      if (filterSel) filterSel.disabled = true;
+
       let orders = [];
       if (apiUrl) {
         try {
           orders = await callApi('getOrders', { date }) || [];
+          if (seq !== _loadOrdersSeq) return; // 已轉咗其他日子，丟棄過期結果
           // Sheet 為準：用 Sheet 資料覆蓋本地同日快取（唔合併，避免重複）
           localOrders = localOrders.filter(o => o.date !== date).concat(orders.map(normalizeOrder));
           localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
         } catch (e) {
+          if (seq !== _loadOrdersSeq) return;
           orders = localOrders.filter(o => o.date === date);
           toast('無法連線 Sheet，顯示本機快取');
         }
       } else {
         orders = localOrders.filter(o => o.date === date);
       }
+      if (seq !== _loadOrdersSeq) return;
 
-      const tbody = document.getElementById('ordersBody');
+      if (filterSel) filterSel.disabled = false;
+      if (stats) stats.className = 'status-bar';
       if (!orders.length) {
         tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999">此日暫無訂單</td></tr>';
         document.getElementById('orderStats').innerHTML = '';
@@ -1553,6 +1598,7 @@
         </tr>
       `;
       }).join('');
+      if (filterSel) filterSel.disabled = false;
     }
 
     function normalizeOrder(o) {
@@ -1717,11 +1763,18 @@
     let _debtAllOrders = []; // 最新全量（含已付，方便篩人）
 
     async function loadDebts() {
+      const seq = ++_loadDebtsSeq;
+      const box = document.getElementById('debtList');
+      const detail = document.getElementById('debtPersonDetail');
+      if (box) box.innerHTML = loadingHtml('載入欠款資料中');
+      if (detail) detail.innerHTML = '<p style="color:#999;font-size:.9rem">載入中…</p>';
+
       let unpaid = [];
       let all = [];
       if (apiUrl) {
         try {
           unpaid = (await callApi('getAllUnpaid') || []).map(normalizeOrder);
+          if (seq !== _loadDebtsSeq) return;
           try {
             all = (await callApi('getAllOrders') || []).map(normalizeOrder);
           } catch (e2) {
@@ -1746,9 +1799,10 @@
         unpaid = localOrders.filter(o => !o.paid);
         all = localOrders.slice();
       }
+      if (seq !== _loadDebtsSeq) return;
       _debtAllOrders = all.length ? all : localOrders.slice();
 
-      const box = document.getElementById('debtList');
+      // box 已在函數開頭宣告
       const map = {};
       // 全日份數（含已付）先計好，先至有滿5減2
       const dayCounts = dayCountMapFromOrders(_debtAllOrders.length ? _debtAllOrders : localOrders);
@@ -2029,19 +2083,43 @@
     let orderLockUntil = localStorage.getItem('lunch_order_lock_until') || '';
 
     async function loadOverview() {
+      const seq = ++_loadOverviewSeq;
+      const stats = document.getElementById('overviewStats');
+      let cardHost = document.getElementById('overviewCards');
+      const body = document.getElementById('overviewBody');
+      if (stats) {
+        stats.className = 'status-bar loading-hint';
+        stats.innerHTML = '<div class="status-item">⏳ 正在載入總覽…</div>';
+      }
+      if (!cardHost && body) {
+        const table = body.closest('table');
+        cardHost = document.createElement('div');
+        cardHost.id = 'overviewCards';
+        cardHost.className = 'overview-grid';
+        if (table && table.parentNode) {
+          table.style.display = 'none';
+          table.parentNode.insertBefore(cardHost, table);
+        }
+      }
+      if (cardHost) cardHost.innerHTML = loadingHtml('載入總覽中');
+
       let orders = [];
       if (apiUrl) {
         try {
           orders = (await callApi('getAllOrders') || []).map(normalizeOrder);
+          if (seq !== _loadOverviewSeq) return;
           localOrders = orders.slice();
           localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
         } catch (e) {
+          if (seq !== _loadOverviewSeq) return;
           orders = localOrders.slice();
           toast('總覽改用本機資料：' + e.message);
         }
       } else {
         orders = localOrders.slice();
       }
+      if (seq !== _loadOverviewSeq) return;
+      if (stats) stats.className = 'status-bar';
 
       const byDate = {};
       orders.forEach(o => {
@@ -2073,13 +2151,9 @@
         if (mf) dates = dates.filter(d => d.startsWith(mf));
       }
 
-      const body = document.getElementById('overviewBody');
-      const stats = document.getElementById('overviewStats');
-      // body was table - we'll replace parent usage: put cards in a wrapper
-      // Use overviewBody as container for cards (change from tbody if needed)
-      const table = body && body.closest('table');
-      let cardHost = document.getElementById('overviewCards');
+      // body / stats / cardHost 已在函數開頭準備
       if (!cardHost) {
+        const table = body && body.closest('table');
         cardHost = document.createElement('div');
         cardHost.id = 'overviewCards';
         cardHost.className = 'overview-grid';
