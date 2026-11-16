@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
-  <title>HO YU PANDA V1.09</title>
+  <title>HO YU PANDA V1.10</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
@@ -710,6 +710,7 @@
         // 必須串列：Chrome 同時打多個 Google Script 會超時
         const ok = await testConnection();
         await loadRemoteSettings();
+        startOrderLockPolling();
         await loadMenus();
         populateDateSelects();
         renderMeals();
@@ -2481,27 +2482,52 @@
         date = today;
       }
       if (!confirm('確定鎖定「' + date + '」及之前的訂單？\n（未來日子仍可預先落訂）\n鎖定後同事不能再新增／修改這些日子的訂單。')) return;
-      orderLockUntil = date;
-      localStorage.setItem('lunch_order_lock_until', orderLockUntil);
-      if (apiUrl) {
-        try { await callApi('setSetting', { key: 'order_lock_until', value: orderLockUntil }); } catch (e) { console.warn(e); }
+      if (!apiUrl) {
+        toast('❌ 未連接 Google Sheet，無法全域鎖定（只會鎖呢部機）');
+        return;
+      }
+      try {
+        // 專用 setOrderLock，失敗要通知
+        const res = await callApi('setOrderLock', { lockUntil: date });
+        const saved = (res && res.lockUntil) ? String(res.lockUntil).substring(0, 10) : date;
+        orderLockUntil = saved;
+        localStorage.setItem('lunch_order_lock_until', orderLockUntil);
+      } catch (e) {
+        // fallback setSetting
+        try {
+          await callApi('setSetting', { key: 'order_lock_until', value: date });
+          orderLockUntil = date;
+          localStorage.setItem('lunch_order_lock_until', orderLockUntil);
+        } catch (e2) {
+          toast('❌ 鎖定寫入 Sheet 失敗：' + (e2.message || e.message) + '（其他裝置唔會鎖到）');
+          return;
+        }
       }
       updateOrderLockBanner();
       try { populateDateSelects(); } catch (e) {}
-      toast('已鎖定 ' + date + ' 及之前（已同步到 Google Sheet，其他裝置重新整理後生效）');
+      toast('✅ 已全域鎖定 ' + orderLockUntil + ' 及之前（所有裝置生效）');
     }
 
     async function unlockOrders() {
       if (!requireAdminPin('解除鎖定需要 PIN')) return;
       if (!confirm('確定解除訂單鎖定？')) return;
+      if (apiUrl) {
+        try {
+          await callApi('setOrderLock', { lockUntil: '' });
+        } catch (e) {
+          try {
+            await callApi('setSetting', { key: 'order_lock_until', value: '' });
+          } catch (e2) {
+            toast('❌ 解除鎖定寫入失敗：' + (e2.message || e.message));
+            return;
+          }
+        }
+      }
       orderLockUntil = '';
       localStorage.removeItem('lunch_order_lock_until');
-      if (apiUrl) {
-        try { await callApi('setSetting', { key: 'order_lock_until', value: '' }); } catch (e) { console.warn(e); }
-      }
       updateOrderLockBanner();
       try { populateDateSelects(); } catch (e) {}
-      toast('已解除鎖定');
+      toast('✅ 已全域解除鎖定');
     }
 
     function copyExport() {
@@ -2720,23 +2746,53 @@
     }
 
 
+
+    let _lockPollTimer = null;
+    function startOrderLockPolling() {
+      if (_lockPollTimer) return;
+      _lockPollTimer = setInterval(() => {
+        if (apiUrl) loadRemoteSettings().catch(() => {});
+      }, 45000);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && apiUrl) {
+          loadRemoteSettings().catch(() => {});
+        }
+      });
+    }
+
     async function loadRemoteSettings() {
       if (!apiUrl) {
         updateOrderLockBanner();
         return;
       }
       try {
-        const lock = await callApi('getSetting', { key: 'order_lock_until' }).catch(() => null);
-        // 以 Sheet 為準：有值就鎖，空字串就解鎖（同步所有裝置）
-        if (lock !== null && lock !== undefined) {
-          const v = String(lock).trim();
-          // 有時 API 回傳 { ok:true } 物件，忽略
-          if (v && v !== '[object Object]' && /^\d{4}-\d{2}-\d{2}/.test(v)) {
-            orderLockUntil = v.substring(0, 10);
+        // 優先用專用 getOrderLock（伺服器已正規化日期）
+        let lockVal = '';
+        try {
+          const lockRes = await callApi('getOrderLock', {});
+          if (lockRes && typeof lockRes === 'object' && lockRes.lockUntil != null) {
+            lockVal = String(lockRes.lockUntil).trim();
+          } else if (typeof lockRes === 'string') {
+            lockVal = lockRes.trim();
+          }
+        } catch (e1) {
+          // 舊 Script 相容
+          const lock = await callApi('getSetting', { key: 'order_lock_until' }).catch(() => null);
+          if (lock != null) lockVal = String(lock).trim();
+        }
+        // 正規化
+        if (/^\d{4}-\d{2}-\d{2}/.test(lockVal)) {
+          orderLockUntil = lockVal.substring(0, 10);
+          localStorage.setItem('lunch_order_lock_until', orderLockUntil);
+        } else if (!lockVal || lockVal === 'null' || lockVal === 'undefined' || lockVal === '[object Object]') {
+          orderLockUntil = '';
+          localStorage.removeItem('lunch_order_lock_until');
+        } else {
+          // 嘗試 parse Date 字串
+          const d = new Date(lockVal);
+          if (!isNaN(d.getTime())) {
+            orderLockUntil = toDateKey(d);
             localStorage.setItem('lunch_order_lock_until', orderLockUntil);
-          } else if (v === '' || v === 'null' || v === 'undefined') {
-            orderLockUntil = '';
-            localStorage.removeItem('lunch_order_lock_until');
           }
         }
         const wd = await callApi('getSetting', { key: 'pickup_by_weekday' }).catch(() => null);
@@ -2750,7 +2806,6 @@
       refreshPickupDisplay();
       renderWeekdayPickupFields();
       updateOrderLockBanner();
-      // 鎖定狀態可能影響日子選單
       if (typeof MENUS !== 'undefined' && Object.keys(MENUS).length) {
         try { populateDateSelects(); } catch (e) {}
       }
@@ -2992,11 +3047,82 @@ function getSettingsSheet_(ss) {
   return ss.getSheetByName('Settings') || ss.getSheetByName('Setting');
 }
 
+
+/** 讀取全域鎖定日（YYYY-MM-DD 或空字串） */
+function getOrderLockUntil_(ss) {
+  var sheet = getSettingsSheet_(ss);
+  if (!sheet) return '';
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]).trim() === 'order_lock_until') {
+      return normalizeLockDate_(rows[i][1]);
+    }
+  }
+  return '';
+}
+
+/** 把 Sheet 可能變咗 Date 嘅值統一成 YYYY-MM-DD */
+function normalizeLockDate_(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime())) {
+    return Utilities.formatDate(v, 'Asia/Hong_Kong', 'yyyy-MM-dd');
+  }
+  var s = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+  // 例如 "Mon Nov 16 2026 ..." 唔收
+  var d = new Date(s);
+  if (!isNaN(d.getTime()) && s.length > 8) {
+    try {
+      return Utilities.formatDate(d, 'Asia/Hong_Kong', 'yyyy-MM-dd');
+    } catch (e) {}
+  }
+  return '';
+}
+
+function writeSetting_(ss, key, value) {
+  var sheet = getSettingsSheet_(ss);
+  if (!sheet) {
+    sheet = ss.insertSheet('Setting');
+    sheet.appendRow(['key', 'value']);
+  }
+  // 確保標題
+  if (sheet.getLastRow() === 0) sheet.appendRow(['key', 'value']);
+  var rows = sheet.getDataRange().getValues();
+  var found = false;
+  var strVal = value == null ? '' : String(value);
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]).trim() === String(key)) {
+      // 強制文字格式，避免被 Sheet 轉成日期
+      sheet.getRange(i + 1, 2).setNumberFormat('@');
+      sheet.getRange(i + 1, 2).setValue(strVal);
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    sheet.appendRow([key, '']);
+    var r = sheet.getLastRow();
+    sheet.getRange(r, 2).setNumberFormat('@');
+    sheet.getRange(r, 2).setValue(strVal);
+  }
+  return { ok: true, key: key, value: strVal };
+}
+
 function handleAction(action, data) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var result = null;
 
   if (action === 'addOrder') {
+    // 伺服器端強制鎖定：所有裝置都受約束
+    var lockUntil = getOrderLockUntil_(ss);
+    var orderDate = '';
+    if (data.date) {
+      orderDate = normalizeLockDate_(data.date);
+      if (!orderDate) orderDate = String(data.date).substring(0, 10);
+    }
+    if (lockUntil && orderDate && orderDate <= lockUntil) {
+      throw new Error('訂單已鎖定（鎖至 ' + lockUntil + '），不能再落「' + orderDate + '」或更早的單。請聯絡負責人。');
+    }
     var sheet = ss.getSheetByName('Orders');
     var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     var hasTakeaway = headers.indexOf('takeawayFee') >= 0;
@@ -3085,8 +3211,17 @@ function handleAction(action, data) {
   else if (action === 'deleteOrder') {
     var sheet = ss.getSheetByName('Orders');
     var rows = sheet.getDataRange().getValues();
+    var headers = rows[0];
+    var dateCol = headers.indexOf('date');
+    var lockUntilDel = getOrderLockUntil_(ss);
     for (var i = 1; i < rows.length; i++) {
       if (String(rows[i][0]) === String(data.id)) {
+        if (lockUntilDel && dateCol >= 0) {
+          var od = normalizeLockDate_(rows[i][dateCol]);
+          if (od && od <= lockUntilDel && !data.forceAdmin) {
+            throw new Error('此日訂單已鎖定（鎖至 ' + lockUntilDel + '），不能刪除。請負責人先解除鎖定。');
+          }
+        }
         sheet.deleteRow(i + 1);
         break;
       }
@@ -3094,31 +3229,46 @@ function handleAction(action, data) {
     result = { ok: true };
   }
   else if (action === 'setSetting') {
-    var sheet = getSettingsSheet_(ss);
-    if (!sheet) {
-      sheet = ss.insertSheet('Setting');
-      sheet.appendRow(['key', 'value']);
+    var val = data.value;
+    // 鎖定日強制標準格式
+    if (String(data.key) === 'order_lock_until' && val) {
+      val = normalizeLockDate_(val) || String(val).substring(0, 10);
     }
-    var rows = sheet.getDataRange().getValues();
-    var found = false;
-    for (var i = 1; i < rows.length; i++) {
-      if (String(rows[i][0]) === String(data.key)) {
-        sheet.getRange(i + 1, 2).setValue(data.value);
-        found = true;
-        break;
-      }
-    }
-    if (!found) sheet.appendRow([data.key, data.value]);
-    result = { ok: true };
+    result = writeSetting_(ss, data.key, val);
   }
   else if (action === 'getSetting') {
     var sheet = getSettingsSheet_(ss);
-    if (!sheet) return '';
-    var rows = sheet.getDataRange().getValues();
-    for (var i = 1; i < rows.length; i++) {
-      if (String(rows[i][0]) === String(data.key)) return rows[i][1];
-    }
     result = '';
+    if (sheet) {
+      var rows = sheet.getDataRange().getValues();
+      for (var i = 1; i < rows.length; i++) {
+        if (String(rows[i][0]).trim() === String(data.key).trim()) {
+          var raw = rows[i][1];
+          if (String(data.key) === 'order_lock_until') {
+            result = normalizeLockDate_(raw);
+          } else if (raw instanceof Date) {
+            result = Utilities.formatDate(raw, 'Asia/Hong_Kong', 'yyyy-MM-dd');
+          } else {
+            result = raw == null ? '' : String(raw);
+          }
+          break;
+        }
+      }
+    }
+  }
+  else if (action === 'getOrderLock') {
+    // 專用：所有裝置讀鎖定狀態
+    result = { lockUntil: getOrderLockUntil_(ss) };
+  }
+  else if (action === 'setOrderLock') {
+    var lockDate = data.lockUntil || data.value || '';
+    if (lockDate) {
+      lockDate = normalizeLockDate_(lockDate) || String(lockDate).substring(0, 10);
+    } else {
+      lockDate = '';
+    }
+    writeSetting_(ss, 'order_lock_until', lockDate);
+    result = { ok: true, lockUntil: lockDate };
   }
   else if (action === 'importMenus') {
     var items = data.items;
