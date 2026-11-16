@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
-  <title>HO YU PANDA V1.07</title>
+  <title>HO YU PANDA V1.08</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
@@ -78,6 +78,27 @@
     .btn-secondary:hover { background: #e0e0e0; }
     .btn-success { background: var(--success); color: white; }
     .btn-danger { background: var(--danger); color: white; }
+
+    /* 落單中全屏遮罩，防 double click */
+    .submit-overlay {
+      display: none; position: fixed; inset: 0; z-index: 10000;
+      background: rgba(0,0,0,.55); align-items: center; justify-content: center;
+      flex-direction: column; padding: 24px;
+    }
+    .submit-overlay.show { display: flex; }
+    .submit-overlay-box {
+      background: #fff; border-radius: 16px; padding: 28px 24px; text-align: center;
+      max-width: 300px; width: 100%; box-shadow: 0 16px 40px rgba(0,0,0,.3);
+    }
+    .submit-overlay .spinner-lg {
+      width: 40px; height: 40px; border: 4px solid #f0ebe3; border-top-color: var(--primary);
+      border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 14px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .btn-primary:disabled, #submitBtn:disabled {
+      opacity: .65; cursor: not-allowed; pointer-events: none;
+    }
+
     .btn-block { width: 100%; }
     .btn:disabled { opacity: .5; cursor: not-allowed; }
     .meal-grid { display: grid; gap: 8px; }
@@ -395,7 +416,7 @@
           <option value="5">包裝 5</option>
         </select>
         <p style="font-size:.75rem;color:var(--muted);margin-top:4px">預設包裝 1；只有需要分開先選 2–5。匯出時若全部都係包裝 1 就唔會顯示包裝字眼。</p>
-        <button class="btn btn-primary btn-block" style="margin-top:14px" id="submitBtn" onclick="submitOrder()">
+        <button type="button" class="btn btn-primary btn-block" style="margin-top:14px" id="submitBtn" onclick="submitOrder(); return false;">
           ✅ 確認落單
         </button>
       </div>
@@ -584,6 +605,15 @@
           若「無痕正常、一般模式失敗」：多半是 Chrome 快取或擴充功能。請用上面按鈕，或 Chrome → 鎖頭/網站設定 → 清除資料。
         </p>
       </div>
+    </div>
+  </div>
+
+  
+  <div class="submit-overlay" id="submitOverlay" aria-live="assertive">
+    <div class="submit-overlay-box">
+      <div class="spinner-lg"></div>
+      <div style="font-size:1.1rem;font-weight:700;color:var(--primary)">正在落單…</div>
+      <p style="font-size:.85rem;color:var(--muted);margin-top:8px;line-height:1.4">請勿關閉或重複撳掣<br>稍等幾秒即可完成</p>
     </div>
   </div>
 
@@ -1278,8 +1308,42 @@
 
     // ===================== 落單 =====================
     let _submitting = false;
+    let _lastSubmitKey = '';
+    let _lastSubmitAt = 0;
+
+    function showSubmitOverlay(show) {
+      const el = document.getElementById('submitOverlay');
+      if (el) {
+        if (show) el.classList.add('show');
+        else el.classList.remove('show');
+      }
+      const btn = document.getElementById('submitBtn');
+      if (btn) {
+        if (show) {
+          btn.disabled = true;
+          btn.textContent = '提交中…請勿重複撳';
+        } else if (!_submitting) {
+          btn.disabled = false;
+          btn.textContent = '✅ 確認落單';
+        }
+      }
+    }
+
     async function submitOrder() {
-      if (_submitting) { toast('正在提交，請稍候…'); return; }
+      // 立刻鎖死，避免 await 期間再撳一次造成 double order
+      if (_submitting) {
+        toast('⏳ 正在落單，請稍候，唔好再撳');
+        showSubmitOverlay(true);
+        return;
+      }
+      const initialEarly = document.getElementById('userInitial').value.trim().toUpperCase();
+      if (!initialEarly) { toast('請輸入 Initial'); return; }
+      if (!selectedMeal) { toast('請選擇飯餐'); return; }
+
+      _submitting = true;
+      showSubmitOverlay(true);
+
+      try {
       // 提交前再拉一次鎖定狀態（避免其他裝置已鎖但本機未更新）
       if (apiUrl) {
         try { await loadRemoteSettings(); } catch (e) {}
@@ -1291,13 +1355,7 @@
         populateDateSelects();
         return;
       }
-      const initial = document.getElementById('userInitial').value.trim().toUpperCase();
-      if (!initial) { toast('請輸入 Initial'); return; }
-      if (!selectedMeal) { toast('請選擇飯餐'); return; }
-      _submitting = true;
-      const submitBtn = document.getElementById('submitBtn');
-      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = '提交中…'; }
-      try {
+      const initial = initialEarly;
 
       const drink = document.getElementById('drinkSelect').value;
       const ice = document.getElementById('iceLevel').value;
@@ -1347,6 +1405,31 @@
         note: noteStored
       };
 
+
+      // 防 double：同一人同一日同一飯 60 秒內唔重複提交
+      const dedupeKey = [order.initial, order.date, order.mealCode, order.drink || '', order.note || ''].join('|');
+      const now = Date.now();
+      if (dedupeKey === _lastSubmitKey && (now - _lastSubmitAt) < 60000) {
+        toast('⚠️ 剛才已落過相同訂單，請勿重複提交');
+        return;
+      }
+      // 本機已有極相似未付訂單（10 分鐘內）亦提示
+      const recentDup = localOrders.find(o =>
+        String(o.initial).toUpperCase() === order.initial &&
+        o.date === order.date &&
+        o.mealCode === order.mealCode &&
+        (o.drink || '') === (order.drink || '') &&
+        !o.paid &&
+        o.timestamp && (now - new Date(o.timestamp).getTime()) < 10 * 60 * 1000
+      );
+      if (recentDup) {
+        if (!confirm('系統發現你喺 10 分鐘內已落過相同飯餐。\\n確定要再落一單？（多數係誤撳）')) {
+          return;
+        }
+      }
+      _lastSubmitKey = dedupeKey;
+      _lastSubmitAt = now;
+
       // 記住 initial
       if (!knownInitials.includes(initial)) {
         knownInitials.push(initial);
@@ -1391,8 +1474,19 @@
       calcPrice();
       } finally {
         _submitting = false;
+        showSubmitOverlay(false);
         const btn = document.getElementById('submitBtn');
-        if (btn) { btn.disabled = false; btn.textContent = '✅ 確認落單'; }
+        if (btn) {
+          // 成功後短時間保持 disabled，進一步防連撳
+          btn.disabled = true;
+          btn.textContent = '✅ 已提交';
+          setTimeout(() => {
+            if (!_submitting) {
+              btn.disabled = false;
+              btn.textContent = '✅ 確認落單';
+            }
+          }, 2000);
+        }
       }
     }
 
