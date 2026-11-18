@@ -604,6 +604,29 @@
             開啟 QR Code 原圖（Google Drive）
           </a>
         </p>
+        <div id="exportDayTotalBox" style="margin-top:16px;padding:14px;background:#fef2f2;border-radius:12px;border:1px solid #fecaca">
+          <div style="font-size:.85rem;color:var(--muted)">所選日子應收合計（已計批量優惠）</div>
+          <div id="exportDayTotal" style="font-size:1.6rem;font-weight:800;color:var(--primary);margin-top:4px">$0</div>
+          <div id="exportDayTotalMeta" style="font-size:.8rem;color:var(--muted);margin-top:4px"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>一鍵 Email 通知今日訂飯同事</h2>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">
+          會寄去 <strong>initial@hoyu.edu.hk</strong>（例如 CKH → ckh@hoyu.edu.hk）。<br>
+          內容包括：今日餐飲、應付（含舊欠）、PayMe、未來一星期訂飯、10:00 前訂飯提醒。
+        </p>
+        <label>通知邊一日？</label>
+        <select id="emailNotifyDate"></select>
+        <label style="margin-top:10px;display:flex;align-items:center;gap:8px;font-weight:500">
+          <input type="checkbox" id="emailOnlyUnpaid" style="width:auto" />
+          只通知「該日仍未付款」的同事
+        </label>
+        <button type="button" class="btn btn-primary btn-block" style="margin-top:12px" id="btnSendEmails" onclick="sendTodayOrderEmails()">
+          📧 一鍵發送 Email
+        </button>
+        <div id="emailSendResult" style="margin-top:10px;font-size:.85rem;display:none"></div>
       </div>
     </div>
 
@@ -819,6 +842,13 @@
           renderMeals();
           updateOrderLockBanner();
         };
+      }
+      // Email 通知日子同步
+      const emailDateSel = document.getElementById('emailNotifyDate');
+      const exportSel = document.getElementById('exportDate');
+      if (emailDateSel && exportSel) {
+        emailDateSel.innerHTML = exportSel.innerHTML;
+        emailDateSel.value = exportSel.value;
       }
       updateOrderLockBanner();
     }
@@ -2436,7 +2466,31 @@
       text += `放可譽中學門口，直行5-10步轉右走廊上的長枱（放外賣專用，電聯未必有人即時聽）\n`;
 
       document.getElementById('exportText').value = text;
+      updateExportDayTotal(date, orders);
     }
+
+    function updateExportDayTotal(date, orders) {
+      const el = document.getElementById('exportDayTotal');
+      const meta = document.getElementById('exportDayTotalMeta');
+      if (!el) return;
+      orders = orders || localOrders.filter(o => o.date === date);
+      const n = orders.length;
+      if (!n) {
+        el.textContent = '$0';
+        if (meta) meta.textContent = '暫無訂單';
+        return;
+      }
+      const dayCount = n;
+      const sum = orders.reduce((s, o) => s + getEffectiveTotal(o, dayCount), 0);
+      const unpaidN = orders.filter(o => !o.paid).length;
+      const bulkLab = getBulkLabel(dayCount);
+      el.textContent = '$' + sum;
+      if (meta) {
+        meta.textContent = '共 ' + n + ' 份' + (bulkLab ? '（' + bulkLab + '）' : '') +
+          (unpaidN ? ' · ' + unpaidN + ' 單未付' : ' · 全部已付');
+      }
+    }
+
 
 
     function isOrderDateLocked(dateStr) {
@@ -2549,6 +2603,62 @@
       updateOrderLockBanner();
       try { populateDateSelects(); } catch (e) {}
       toast('✅ 已全域解除鎖定');
+    }
+
+
+    async function sendTodayOrderEmails() {
+      if (!requireAdminPin('發送 Email 需要 PIN')) return;
+      if (!apiUrl) { toast('未連接 Google Sheet'); return; }
+      const date = (document.getElementById('emailNotifyDate') || {}).value
+        || (document.getElementById('exportDate') || {}).value
+        || toDateKey(new Date());
+      const onlyUnpaid = !!(document.getElementById('emailOnlyUnpaid') || {}).checked;
+      if (!confirm('確定發送 Email 給「' + date + '」有訂飯的同事？\\n收件：initial@hoyu.edu.hk\\n' +
+          (onlyUnpaid ? '（只限未付款）' : '（該日全部有單同事）'))) return;
+      const btn = document.getElementById('btnSendEmails');
+      const resultBox = document.getElementById('emailSendResult');
+      if (btn) { btn.disabled = true; btn.textContent = '發送中…'; }
+      if (resultBox) {
+        resultBox.style.display = 'block';
+        resultBox.innerHTML = '<span style="color:var(--muted)">⏳ 正在發送，請稍候…</span>';
+      }
+      try {
+        const res = await callApi('sendTodayEmails', {
+          date: date,
+          onlyUnpaid: onlyUnpaid,
+          paymeUrl: (typeof PAYME_URL !== 'undefined' ? PAYME_URL : 'https://payme.hsbc/stephenhome07')
+        });
+        const sent = (res && res.sent) || 0;
+        const failed = (res && res.failed) || 0;
+        let html = '<div style="padding:10px;background:#f0fdf4;border-radius:8px;border:1px solid #86efac">';
+        html += '<strong>✅ 已發送 ' + sent + ' 封</strong>';
+        if (failed) html += ' · <span style="color:var(--danger)">失敗 ' + failed + ' 封</span>';
+        if (res && res.message) html += '<br>' + res.message;
+        if (res && res.sentList && res.sentList.length) {
+          html += '<div style="margin-top:6px;font-size:.8rem">' +
+            res.sentList.map(function(x) {
+              return x.initial + ' → ' + x.email + '（今日$' + x.todaySum +
+                (x.debtSum ? ' +舊欠$' + x.debtSum : '') + '）';
+            }).join('<br>') + '</div>';
+        }
+        if (res && res.failedList && res.failedList.length) {
+          html += '<div style="margin-top:6px;color:var(--danger);font-size:.8rem">' +
+            res.failedList.map(function(x) {
+              return x.initial + '：' + (x.error || '失敗');
+            }).join('<br>') + '</div>';
+        }
+        html += '</div>';
+        if (resultBox) resultBox.innerHTML = html;
+        toast('Email 完成：成功 ' + sent + (failed ? '，失敗 ' + failed : ''));
+      } catch (e) {
+        if (resultBox) {
+          resultBox.innerHTML = '<div style="color:var(--danger)">❌ ' + (e.message || e) +
+            '<br><small>請確認已部署最新 Code.gs（v7），並用 ckh@hoyu.edu.hk 帳戶授權 MailApp。</small></div>';
+        }
+        toast('發送失敗：' + (e.message || e));
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '📧 一鍵發送 Email'; }
+      }
     }
 
     function copyExport() {
@@ -3310,8 +3420,142 @@ function handleAction(action, data) {
       result = { ok: true, count: items.length };
     }
   }
+
+  else if (action === 'sendTodayEmails') {
+    var targetDate = data.date ? normalizeLockDate_(data.date) : Utilities.formatDate(new Date(), 'Asia/Hong_Kong', 'yyyy-MM-dd');
+    if (!targetDate) targetDate = Utilities.formatDate(new Date(), 'Asia/Hong_Kong', 'yyyy-MM-dd');
+    var onlyUnpaid = data.onlyUnpaid === true || data.onlyUnpaid === 'true';
+    var payme = data.paymeUrl || 'https://payme.hsbc/stephenhome07';
+    var allOrders = readOrders_(ss);
+    // 每日份數（計批量優惠）
+    var dayCounts = {};
+    allOrders.forEach(function(o) {
+      if (!o.date) return;
+      dayCounts[o.date] = (dayCounts[o.date] || 0) + 1;
+    });
+    function bulkDisc(n) {
+      if (n >= 15) return 6;
+      if (n >= 10) return 4;
+      if (n >= 5) return 2;
+      return 0;
+    }
+    function effTotal(o) {
+      var meal = Number(o.mealPrice) || 0;
+      var drink = Number(o.drinkPrice) || 0;
+      var tw = (o.takeawayFee != null && o.takeawayFee !== '') ? Number(o.takeawayFee) : 1;
+      if (isNaN(tw)) tw = 1;
+      var t = meal + drink + tw;
+      t -= bulkDisc(dayCounts[o.date] || 1);
+      return Math.max(0, t);
+    }
+    // 未來 7 日（唔計今日）
+    var futureDates = [];
+    var base = new Date(targetDate + 'T12:00:00+08:00');
+    for (var fi = 1; fi <= 7; fi++) {
+      var fd = new Date(base.getTime() + fi * 86400000);
+      futureDates.push(Utilities.formatDate(fd, 'Asia/Hong_Kong', 'yyyy-MM-dd'));
+    }
+    // 今日訂單按 initial 分組
+    var byInitial = {};
+    allOrders.forEach(function(o) {
+      if (o.date !== targetDate) return;
+      if (onlyUnpaid && o.paid) return;
+      var ini = String(o.initial || '').trim().toUpperCase();
+      if (!ini) return;
+      if (!byInitial[ini]) byInitial[ini] = [];
+      byInitial[ini].push(o);
+    });
+    var sent = [];
+    var failed = [];
+    var skipped = [];
+    var initials = Object.keys(byInitial);
+    if (!initials.length) {
+      result = { ok: true, sent: 0, failed: 0, message: '今日冇需要通知嘅訂單', details: [] };
+    } else {
+      initials.forEach(function(ini) {
+        var list = byInitial[ini];
+        var email = ini.toLowerCase() + '@hoyu.edu.hk';
+        // 今日餐
+        var lines = [];
+        var todaySum = 0;
+        list.forEach(function(o) {
+          var eff = effTotal(o);
+          todaySum += eff;
+          var line = '• ' + (o.mealCode || '') + '. ' + (o.mealName || '');
+          if (o.drink) line += '｜飲品：' + o.drink;
+          line += '｜$' + eff;
+          if (!o.paid) line += '（未付）';
+          else line += '（已付）';
+          lines.push(line);
+        });
+        // 今日之前未付欠款（唔計今日）
+        var debtSum = 0;
+        var debtLines = [];
+        allOrders.forEach(function(o) {
+          if (String(o.initial || '').trim().toUpperCase() !== ini) return;
+          if (o.paid) return;
+          if (!o.date || o.date >= targetDate) return; // 只計今日之前
+          var eff = effTotal(o);
+          debtSum += eff;
+          debtLines.push('• ' + o.date + ' ' + (o.mealCode || '') + '. ' + (o.mealName || '') + ' $' + eff);
+        });
+        var payTotal = todaySum + debtSum;
+        // 未來一星期已訂
+        var futureLines = [];
+        futureDates.forEach(function(fd) {
+          allOrders.forEach(function(o) {
+            if (String(o.initial || '').trim().toUpperCase() !== ini) return;
+            if (o.date !== fd) return;
+            futureLines.push('• ' + fd + ' ' + (o.mealCode || '') + '. ' + (o.mealName || '') + (o.drink ? '｜' + o.drink : ''));
+          });
+        });
+        var subject = '【六記訂飯】今日已為你落單';
+        var body = '';
+        body += ini + ' 你好，\n\n';
+        body += '今日（' + targetDate + '）已為你落單如下：\n';
+        body += lines.join('\n') + '\n';
+        body += '今日應付：$' + todaySum + '\n';
+        if (debtSum > 0) {
+          body += '\n另有較早前未付欠款：$' + debtSum + '\n';
+          body += debtLines.join('\n') + '\n';
+          body += '（今日 + 舊欠）合共建議支付：$' + payTotal + '\n';
+        } else {
+          body += '目前沒有更早的未付欠款。\n';
+        }
+        body += '\nPayMe 過數：' + payme + '\n';
+        body += '（或向負責人索取公司過數 QR Code）\n';
+        body += '\n—— 未來一星期訂飯 ——\n';
+        if (futureLines.length) {
+          body += futureLines.join('\n') + '\n';
+        } else {
+          body += '未來日子尚未有訂飯記錄。\n';
+        }
+        body += '\n【溫馨提示】最遲請於每天 10:00 前完成訂飯，以免趕不及落單。\n';
+        body += '\n此信由六記訂飯系統自動發出，如有錯漏請盡快聯絡負責人。\n';
+        try {
+          MailApp.sendEmail({
+            to: email,
+            subject: subject,
+            body: body
+          });
+          sent.push({ initial: ini, email: email, todaySum: todaySum, debtSum: debtSum });
+        } catch (errSend) {
+          failed.push({ initial: ini, email: email, error: String(errSend.message || errSend) });
+        }
+      });
+      result = {
+        ok: true,
+        date: targetDate,
+        sent: sent.length,
+        failed: failed.length,
+        sentList: sent,
+        failedList: failed
+      };
+    }
+  }
+
   else if (action === 'ping' || action === '' || !action) {
-    result = { ok: true, msg: '六記訂飯 API v5 (NVN-style POST)' };
+    result = { ok: true, msg: '六記訂飯 API v7' };
   }
   else {
     throw new Error('Unknown action: ' + action);
