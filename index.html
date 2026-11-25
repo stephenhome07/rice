@@ -673,7 +673,7 @@
       <div class="card">
         <h2>系統</h2>
         <p style="font-size:.85rem;color:var(--muted);margin-bottom:8px">
-          管理 PIN（標已付／刪舊單／匯入備份）寫在程式 <code>ADMIN_PIN</code>（目前為 0727）。要讓全校同事打開 GitHub Pages 即自動連上 Firebase，請把 Database URL 填入 <code>index.html</code> 內的 <code>DEFAULT_FIREBASE_DB_URL</code>。
+          管理員操作（標已付／刪舊單／鎖單／備份）受管理 PIN 保護。若要讓全校同事打開網頁即自動連上雲端，請在 <code>index.html</code> 設定 <code>DEFAULT_FIREBASE_DB_URL</code>。
         </p>
         <button class="btn btn-secondary" onclick="document.getElementById('configBox').classList.remove('hidden'); window.scrollTo({top:0,behavior:'smooth'});">🔥 設定 Firebase / Email 網址</button>
         <button class="btn btn-secondary" onclick="clearLocalCache()">清除本機快取</button>
@@ -720,7 +720,7 @@
     // ===================== 狀態（Firebase 雲端資料庫版） =====================
     // 【部署至 GitHub 前建議填寫】把你的 Firebase Realtime Database 網址貼在下方引號內，全校同事打開網頁即自動連上！
     // 例如：'https://hoyu-lunch-default-rtdb.asia-southeast1.firebasedatabase.app'
-    const DEFAULT_FIREBASE_DB_URL = 'https://hoyu-lunch-default-rtdb.asia-southeast1.firebasedatabase.app/';
+    const DEFAULT_FIREBASE_DB_URL = '';
     // 【選填】用於發送 @hoyu.edu.hk 電郵通知的 Google Apps Script 網址（預設保留你原本的 GAS 網址）
     const DEFAULT_MAIL_GAS_URL = 'https://script.google.com/macros/s/AKfycbzeHpG7knP3E5yZvLblWAY_NT-nwhs9FZLT7_4li9PVJGQAL45o1WEWCyt1krC1_Utd/exec';
 
@@ -3106,7 +3106,7 @@
     async function fbRequest(path, method = 'GET', body = undefined, query = '') {
       if (!apiUrl) throw new Error('尚未設定 Firebase Database URL');
       const cleanPath = String(path || '').replace(/^\/+|\/+$/g, '');
-      const url = apiUrl + (cleanPath ? '/' + cleanPath : '') + '.json' + (query ? '?' + query : '');
+      const url = apiUrl + '/' + (cleanPath ? cleanPath + '.json' : '.json') + (query ? '?' + query : '');
       const opts = { method };
       if (body !== undefined) {
         opts.headers = { 'Content-Type': 'application/json' };
@@ -3353,16 +3353,28 @@
     async function exportFullDatabaseJson() {
       if (!apiUrl) { toast('請先連接 Firebase'); return; }
       try {
-        toast('⏳ 正在下載備份…');
-        const fullData = await fbRequest('', 'GET');
-        const blob = new Blob([JSON.stringify(fullData || {}, null, 2)], { type: 'application/json;charset=utf-8' });
+        toast('⏳ 正在從 Firebase 下載備份…');
+        // 分別讀取三個授權節點，兼容子節點 Rules（避免根目錄 /.json 無 .read 權限導致 Failed to fetch / 401）
+        const [orders, menus, settings] = await Promise.all([
+          fbRequest('orders', 'GET'),
+          fbRequest('menus', 'GET'),
+          fbRequest('settings', 'GET')
+        ]);
+        const fullData = {
+          orders: orders || {},
+          menus: menus || [],
+          settings: settings || {}
+        };
+        const blob = new Blob([JSON.stringify(fullData, null, 2)], { type: 'application/json;charset=utf-8' });
+        const urlObj = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
+        a.href = urlObj;
         a.download = 'hoyu_lunch_firebase_backup_' + toDateKey(new Date()) + '.json';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        toast('✅ 備份已下載');
+        setTimeout(() => URL.revokeObjectURL(urlObj), 3000);
+        toast('✅ 備份已成功下載');
       } catch (e) {
         toast('下載備份失敗：' + e.message);
       }
@@ -3388,12 +3400,17 @@
         }
         const oCount = json.orders ? Object.keys(json.orders).length : 0;
         const mCount = Array.isArray(json.menus) ? json.menus.length : (json.menus ? Object.keys(json.menus).length : 0);
-        if (!confirm(`確定將此 JSON 寫入 Firebase？（會覆蓋同名節點）\n• 訂單：${oCount} 筆\n• 菜單：${mCount} 項`)) {
+        if (!confirm(`確定將此 JSON 寫入 Firebase？（會更新對應節點）\n• 訂單：${oCount} 筆\n• 菜單：${mCount} 項`)) {
           event.target.value = '';
           return;
         }
         toast('⏳ 正在寫入 Firebase…');
-        await fbRequest('', 'PUT', json);
+        // 按節點寫入以符合 Rules（orders 用 PATCH 匹配 $orderId/.write）
+        if (json.menus !== undefined) await fbRequest('menus', 'PUT', json.menus);
+        if (json.settings !== undefined) await fbRequest('settings', 'PUT', json.settings);
+        if (json.orders && typeof json.orders === 'object') {
+          await fbRequest('orders', 'PATCH', json.orders);
+        }
         toast('✅ 成功匯入 Firebase！正在重新載入…');
         await retryConnection();
       } catch (e) {
