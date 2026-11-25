@@ -1,0 +1,3511 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <title>HO YU PANDA V2.0 (Firebase Edition)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #c41e3a;
+      --primary-dark: #9a1830;
+      --bg: #f7f5f2;
+      --card: #ffffff;
+      --text: #1a1a1a;
+      --muted: #666;
+      --border: #e5e0d8;
+      --success: #0d7a4f;
+      --warning: #b45309;
+      --danger: #b91c1c;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Noto Sans TC', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    .container { max-width: 960px; margin: 0 auto; padding: 16px; }
+    header {
+      background: var(--primary);
+      color: white;
+      padding: 16px 0;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.12);
+    }
+    header .container { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+    header h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: .05em; }
+    header .meta { font-size: .85rem; opacity: .9; }
+    .tabs {
+      display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap;
+      background: var(--card); border-radius: 10px; padding: 6px;
+      border: 1px solid var(--border);
+    }
+    .tab {
+      flex: 1; min-width: 90px; padding: 10px 12px; border: none; background: transparent;
+      border-radius: 8px; font-weight: 500; cursor: pointer; font-size: .9rem;
+      color: var(--muted); transition: all .15s;
+    }
+    .tab.active { background: var(--primary); color: white; }
+    .tab:hover:not(.active) { background: #f0ebe3; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .card {
+      background: var(--card); border-radius: 12px; border: 1px solid var(--border);
+      padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.04);
+    }
+    .card h2 { font-size: 1.05rem; margin-bottom: 12px; color: var(--primary); }
+    label { display: block; font-size: .85rem; font-weight: 500; margin-bottom: 4px; color: var(--muted); }
+    select, input[type="text"], input[type="number"], textarea {
+      width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
+      font-size: 1rem; font-family: inherit; background: #fff;
+    }
+    select:focus, input:focus, textarea:focus { outline: 2px solid var(--primary); border-color: transparent; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 600px) { .row { grid-template-columns: 1fr; } }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 10px 18px; border: none; border-radius: 8px; font-weight: 600;
+      font-size: .95rem; cursor: pointer; font-family: inherit; transition: all .15s;
+    }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-secondary { background: #eee; color: var(--text); }
+    .btn-secondary:hover { background: #e0e0e0; }
+    .btn-success { background: var(--success); color: white; }
+    .btn-danger { background: var(--danger); color: white; }
+
+    /* 落單中全屏遮罩，防 double click */
+    .submit-overlay {
+      display: none; position: fixed; inset: 0; z-index: 10000;
+      background: rgba(0,0,0,.55); align-items: center; justify-content: center;
+      flex-direction: column; padding: 24px;
+    }
+    .submit-overlay.show { display: flex; }
+    .submit-overlay-box {
+      background: #fff; border-radius: 16px; padding: 28px 24px; text-align: center;
+      max-width: 300px; width: 100%; box-shadow: 0 16px 40px rgba(0,0,0,.3);
+    }
+    .submit-overlay .spinner-lg {
+      width: 40px; height: 40px; border: 4px solid #f0ebe3; border-top-color: var(--primary);
+      border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 14px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .panel-loading {
+      text-align: center; padding: 28px 16px; color: var(--muted);
+      background: #faf8f5; border-radius: 10px; border: 1px dashed var(--border);
+      margin: 8px 0;
+    }
+    .panel-loading .spinner {
+      width: 28px; height: 28px; border: 3px solid #f0ebe3; border-top-color: var(--primary);
+      border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 10px;
+    }
+    .panel-loading strong { display: block; color: var(--text); margin-bottom: 4px; }
+    .status-bar.loading-hint {
+      opacity: .7; font-style: italic;
+    }
+
+    .btn-primary:disabled, #submitBtn:disabled {
+      opacity: .65; cursor: not-allowed; pointer-events: none;
+    }
+
+    .btn-block { width: 100%; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .meal-grid { display: grid; gap: 8px; }
+    .meal-item {
+      display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+      border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+      transition: all .15s; background: #fff;
+    }
+    .meal-item:hover { border-color: var(--primary); background: #fff8f8; }
+    .meal-item.selected { border-color: var(--primary); background: #fef2f2; box-shadow: 0 0 0 2px rgba(196,30,58,.2); }
+    /* 唔知食咩好 · 抽獎 */
+    .lottery-btn {
+      width: 100%; margin-top: 12px; padding: 12px 16px; font-size: 1rem; font-weight: 700;
+      border: 2px dashed var(--primary); background: linear-gradient(135deg,#fff7ed,#fef2f2);
+      color: var(--primary); border-radius: 12px; cursor: pointer; transition: .2s;
+    }
+    .lottery-btn:hover { background: #fef2f2; transform: scale(1.01); }
+    .lottery-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55);
+      z-index: 9999; align-items: center; justify-content: center; padding: 16px;
+    }
+    .lottery-overlay.show { display: flex; }
+    .lottery-modal {
+      background: #fff; border-radius: 16px; max-width: 360px; width: 100%;
+      padding: 24px 20px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,.25);
+      animation: lotteryPop .25s ease;
+    }
+    @keyframes lotteryPop { from { transform: scale(.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .lottery-slot {
+      font-size: 1.35rem; font-weight: 800; min-height: 3.2em; display: flex;
+      align-items: center; justify-content: center; margin: 16px 0;
+      padding: 16px; border-radius: 12px; background: linear-gradient(180deg,#fef3c7,#fed7aa);
+      border: 2px solid #f59e0b; color: #9a3412; line-height: 1.35;
+    }
+    .lottery-slot.spinning { animation: lotteryShake .12s infinite; }
+    @keyframes lotteryShake {
+      0%,100% { transform: translateX(0); }
+      25% { transform: translateX(-3px); }
+      75% { transform: translateX(3px); }
+    }
+    .lottery-slot.done {
+      background: linear-gradient(180deg,#dcfce7,#bbf7d0);
+      border-color: #22c55e; color: #14532d;
+    }
+    .lottery-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .lottery-actions .btn { flex: 1; min-width: 120px; }
+
+    .meal-item input { accent-color: var(--primary); width: 18px; height: 18px; flex-shrink: 0; }
+    .meal-code { font-weight: 700; color: var(--primary); min-width: 24px; }
+    .meal-name { flex: 1; font-size: .95rem; }
+    .meal-price { font-weight: 600; color: var(--text); white-space: nowrap; }
+    .set-box {
+      border: 1px dashed var(--primary); border-radius: 10px; padding: 12px; margin-top: 12px;
+      background: #fffafa;
+    }
+    .set-box h3 { color: var(--primary); font-size: .95rem; margin-bottom: 8px; }
+    .summary-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #f0f0f0; }
+    .summary-row.total { font-weight: 700; font-size: 1.15rem; border-bottom: none; margin-top: 8px; color: var(--primary); }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .75rem; font-weight: 600;
+    }
+    .badge-paid { background: #d1fae5; color: #065f46; }
+    .badge-unpaid { background: #fee2e2; color: #991b1b; }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+    th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+    th { background: #faf8f5; font-weight: 600; color: var(--muted); font-size: .8rem; }
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px);
+      background: #1a1a1a; color: white; padding: 12px 24px; border-radius: 10px;
+      font-size: .9rem; opacity: 0; transition: all .3s; z-index: 999; max-width: 90%;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+    .status-bar {
+      display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; font-size: .85rem;
+    }
+    .status-item { background: #f0ebe3; padding: 6px 12px; border-radius: 8px; }
+    .config-box {
+      background: #fffbeb; border: 1px solid #fcd34d; border-radius: 10px; padding: 14px; margin-bottom: 16px;
+      font-size: .85rem;
+    }
+    .config-box code { background: #fef3c7; padding: 2px 6px; border-radius: 4px; font-size: .8rem; }
+    .hidden { display: none !important; }
+    .drink-opts { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 8px; }
+    @media (max-width: 500px) { .drink-opts { grid-template-columns: 1fr; } }
+    .export-box {
+      background: #f0fdf4; border: 1px solid #86efac; border-radius: 10px; padding: 14px; margin-top: 12px;
+    }
+    .export-box textarea {
+      min-height: 140px; font-size: .85rem; margin: 8px 0; background: #fff;
+    }
+    .pickup-bar {
+      background: linear-gradient(135deg, #1e3a5f, #2d5a87); color: white;
+      padding: 12px 16px; border-radius: 10px; margin-bottom: 16px;
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+    }
+    .pickup-bar strong { font-size: 1.05rem; }
+    .loading { text-align: center; padding: 40px; color: var(--muted); }
+    .spinner {
+      width: 32px; height: 32px; border: 3px solid #eee; border-top-color: var(--primary);
+      border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .filter-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+    .filter-bar select { width: auto; min-width: 120px; }
+
+    .set-options-panel {
+      margin-top: 12px; padding: 12px; background: #fff8f0; border: 1px solid #f0d9b5;
+      border-radius: 10px; display: none;
+    }
+    .set-options-panel.visible { display: block; }
+    .set-options-panel h4 { font-size: .9rem; color: var(--warning); margin-bottom: 8px; }
+    .overview-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px; margin-top: 12px;
+    }
+    .day-card {
+      background: #fff; border: 1px solid var(--border); border-radius: 12px;
+      padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.05);
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .day-card.today { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(196,30,58,.15); }
+    .day-card .day-title { font-weight: 700; font-size: 1rem; display: flex; justify-content: space-between; align-items: center; }
+    .day-card .day-meta { font-size: .8rem; color: var(--muted); }
+    .day-card .people-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+    .chip {
+      background: #f0ebe3; padding: 2px 8px; border-radius: 999px; font-size: .75rem; font-weight: 500;
+    }
+    .chip.unpaid { background: #fee2e2; color: #991b1b; }
+    .chip.paid { background: #d1fae5; color: #065f46; }
+    .meal-bars { font-size: .8rem; }
+    .meal-bar-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+    .meal-bar-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .meal-bar-track { width: 60px; height: 8px; background: #eee; border-radius: 4px; overflow: hidden; }
+    .meal-bar-fill { height: 100%; background: var(--primary); border-radius: 4px; }
+    .pickup-row { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+    .pickup-row input { flex: 1; padding: 6px 8px; font-size: .85rem; }
+    .stat-big {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px;
+    }
+    .stat-card {
+      background: linear-gradient(135deg, #1e3a5f, #2d5a87); color: #fff;
+      border-radius: 12px; padding: 14px; text-align: center;
+    }
+    .stat-card.alt { background: linear-gradient(135deg, #0d7a4f, #14a36a); }
+    .stat-card.warn { background: linear-gradient(135deg, #b45309, #d97706); }
+    .stat-card .num { font-size: 1.6rem; font-weight: 700; }
+    .stat-card .lbl { font-size: .75rem; opacity: .9; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <div>
+        <h1>六記 · 同事訂飯</h1>
+        <div class="meta">電話 24362000 · WhatsApp 5501 8351 / 5501 8108</div>
+      </div>
+      <div class="meta" id="todayLabel"></div>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- 設定提示（Firebase 資料庫設定） -->
+    <div class="config-box" id="configBox">
+      <strong>🔥 Firebase Realtime Database 連線設定</strong><br>
+      1. 到 <a href="https://console.firebase.google.com/" target="_blank" rel="noopener">Firebase Console</a> 建立專案 → 建立 <b>Realtime Database</b>（建議選新加坡 <code>asia-southeast1</code>）<br>
+      2. 在 Realtime Database 右上角 <code>⋮</code> 選擇「匯入 JSON」，上傳 <code>firebase_import.json</code>（或於「管理」分頁直接匯入）即可還原舊訂單、菜單及設定<br>
+      3. 把你的 Database URL 貼到下方儲存（建議同時填入 <code>index.html</code> 內的 <code>DEFAULT_FIREBASE_DB_URL</code> 再推上 GitHub，讓全校同事打開即連上，免設定！）<br>
+      <label style="margin-top:8px">Firebase Realtime Database URL（必填）</label>
+      <input type="text" id="apiUrlInput" placeholder="https://你的專案名稱-default-rtdb.asia-southeast1.firebasedatabase.app" style="margin:4px 0 8px">
+      <label>Email 通知 Webhook / Google Apps Script 網址（選填，用於一鍵寄信至 @hoyu.edu.hk）</label>
+      <input type="text" id="mailGasUrlInput" placeholder="https://script.google.com/macros/s/xxxxx/exec（選填）" style="margin:4px 0 8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+        <button class="btn btn-primary" onclick="saveApiUrl()">儲存並連接 Firebase</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('configBox').classList.add('hidden')">暫時略過（本地模式）</button>
+        <button class="btn btn-secondary" onclick="toggleSetupHelp()">顯示 / 隱藏完整設定教學 & 安全規則</button>
+      </div>
+      <div id="setupHelp" class="hidden" style="margin-top:12px; white-space:pre-wrap; font-size:.8rem; background:#fff; padding:12px; border-radius:8px; max-height:420px; overflow:auto;"></div>
+    </div>
+
+    <!-- 拎飯人 -->
+    <div class="pickup-bar" id="pickupBar">
+      <div>📦 今日拎飯：<strong id="pickupPerson">未設定</strong></div>
+
+    <div id="connBar" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;font-size:.85rem;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      <span id="connMsg"></span>
+      <span style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-secondary" style="padding:6px 10px;font-size:.8rem" onclick="retryConnection()">重新連線</button>
+        <button class="btn btn-primary" style="padding:6px 10px;font-size:.8rem" onclick="hardResetSite()">清除快取並重載</button>
+      </span>
+    </div>
+      <button class="btn btn-secondary" style="padding:6px 12px;font-size:.85rem" onclick="editPickup()">更改</button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" data-tab="order">落單</button>
+      <button class="tab" data-tab="orders">今日訂單</button>
+      <button class="tab" data-tab="overview">總覽</button>
+      <button class="tab" data-tab="payment">欠款</button>
+      <button class="tab" data-tab="export">匯出 WhatsApp</button>
+      <button class="tab" data-tab="admin">管理</button>
+    </div>
+
+    <!-- ========== 落單 ========== -->
+    <div class="panel active" id="panel-order">
+      <div id="orderLockBanner" style="display:none;margin-bottom:12px;padding:12px 14px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;font-size:.9rem;font-weight:600"></div>
+      <div class="card">
+        <h2>1. 你的 Initial</h2>
+        <div class="row">
+          <div>
+            <label>選擇或輸入 Initial</label>
+            <input list="initialList" id="userInitial" placeholder="例如 CKH" autocomplete="off" />
+            <datalist id="initialList"></datalist>
+            <p style="font-size:.75rem;color:var(--muted);margin-top:4px">會自動帶出你上次嘅飲品習慣（如凍奶茶少冰少甜）</p>
+          </div>
+          <div>
+            <label>顯示名稱（可選）</label>
+            <input type="text" id="userName" placeholder="例如 陳大文" />
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>2. 選擇日子</h2>
+        <label>訂哪一日的飯？</label>
+        <select id="orderDate"></select>
+      </div>
+
+      <div class="card">
+        <h2>3. 選擇飯餐</h2>
+        <div id="mealList" class="meal-grid">
+          <div class="loading"><div class="spinner"></div>載入菜單中…</div>
+        </div>
+        <button type="button" class="lottery-btn" id="lotteryBtn" onclick="openMealLottery()">🎲 唔知食咩好？抽一個！</button>
+        <div id="setOptions"></div>
+      </div>
+
+      <!-- 抽獎彈窗 -->
+      <div class="lottery-overlay" id="lotteryOverlay" onclick="if(event.target===this && !window._lotterySpinning) closeMealLottery()">
+        <div class="lottery-modal" role="dialog" aria-modal="true">
+          <div style="font-size:1.6rem">🎰</div>
+          <h3 style="margin:8px 0 0;color:#9a3412">今日抽獎</h3>
+          <p id="lotteryHint" style="font-size:.85rem;color:#78716c;margin:6px 0 0">正在從當日 A–G 抽出…</p>
+          <div class="lottery-slot" id="lotterySlot">？？？</div>
+          <div class="lottery-actions" id="lotteryActions" style="display:none">
+            <button type="button" class="btn btn-primary" onclick="confirmLotteryMeal()">✅ 就食呢個</button>
+            <button type="button" class="btn btn-secondary" onclick="startMealLottery()">🔄 再來一次</button>
+            <button type="button" class="btn btn-secondary" onclick="closeMealLottery()">關閉</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>4. 飲品（可選）</h2>
+        <label>飲品</label>
+        <select id="drinkSelect">
+          <option value="">— 唔要飲品 —</option>
+          <option value="凍檸茶">凍檸茶（+$3）</option>
+          <option value="凍奶茶">凍奶茶（+$3）</option>
+          <option value="凍咖啡">凍咖啡（+$3）</option>
+          <option value="凍鴛鴦">凍鴛鴦（+$3）</option>
+          <option value="凍柠檬可乐">凍柠檬可樂（+$3）</option>
+          <option value="熱奶茶">熱奶茶（免費）</option>
+          <option value="熱咖啡">熱咖啡（免費）</option>
+          <option value="熱鴛鴦">熱鴛鴦（免費）</option>
+          <option value="熱檸茶">熱檸茶（免費）</option>
+          <option value="熱檸水">熱檸水（免費）</option>
+          <option value="熱水">熱水（免費）</option>
+          <option value="津路烏龍茶">津路烏龍茶（+$5 升級）</option>
+          <option value="其他">其他（免費，備註寫明）</option>
+        </select>
+        <div class="drink-opts" id="drinkOpts" style="display:none">
+          <div>
+            <label>冰量</label>
+            <select id="iceLevel">
+              <option value="正常">正常</option>
+              <option value="多冰">多冰</option>
+              <option value="少冰">少冰</option>
+              <option value="走冰">走冰</option>
+            </select>
+          </div>
+          <div>
+            <label>甜度</label>
+            <select id="sweetLevel">
+              <option value="正常">正常（全糖）</option>
+              <option value="少糖">少糖</option>
+              <option value="半糖">半糖</option>
+              <option value="微糖">微糖</option>
+              <option value="走糖">走糖</option>
+            </select>
+          </div>
+          <div>
+            <label>其他備註</label>
+            <input type="text" id="drinkNote" placeholder="例如 走茶漬" />
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>5. 確認價錢</h2>
+        <div id="priceSummary">
+          <div class="summary-row"><span>飯餐</span><span id="sumMeal">$0</span></div>
+          <div class="summary-row"><span>外賣費</span><span id="sumTakeaway">+$1</span></div>
+          <div class="summary-row"><span>飲品</span><span id="sumDrink">$0</span></div>
+          <div class="summary-row" id="bulkHintRow" style="display:none;color:var(--success)"><span>滿5份優惠（每飯 −$2）</span><span id="sumBulk">−$0</span></div>
+          <div class="summary-row total"><span>合計</span><span id="sumTotal">$0</span></div>
+        </div>
+        <p style="font-size:.8rem;color:var(--muted);margin-top:8px">
+          飲品免費　·　凍飲另加 $3　·　津路烏龍茶 +$5（套餐升級）　·　每單外賣 +$1　·　當日滿5/10/15份每飯 −$2/$4/$6
+        </p>
+        <label style="margin-top:12px">備註（可選）</label>
+        <input type="text" id="orderNote" placeholder="例如 少油 / 多飯" />
+        <label style="margin-top:12px">包裝（分開包裝用）</label>
+        <select id="orderPack">
+          <option value="1" selected>包裝 1（預設）</option>
+          <option value="2">包裝 2</option>
+          <option value="3">包裝 3</option>
+          <option value="4">包裝 4</option>
+          <option value="5">包裝 5</option>
+        </select>
+        <p style="font-size:.75rem;color:var(--muted);margin-top:4px">預設包裝 1；只有需要分開先選 2–5。匯出時若全部都係包裝 1 就唔會顯示包裝字眼。</p>
+        <button type="button" class="btn btn-primary btn-block" style="margin-top:14px" id="submitBtn" onclick="submitOrder(); return false;">
+          ✅ 確認落單
+        </button>
+      </div>
+    </div>
+
+    <!-- ========== 今日訂單 ========== -->
+    <div class="panel" id="panel-orders">
+      <div class="card">
+        <div class="filter-bar">
+          <label style="margin:0">篩選日子</label>
+          <select id="filterDate" onchange="loadOrders()"></select>
+          <button class="btn btn-secondary" onclick="loadOrders()">重新整理</button>
+        </div>
+        <div class="status-bar" id="orderStats"></div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Initial</th>
+                <th>飯餐</th>
+                <th>飲品</th>
+                <th>金額</th>
+                <th>已付</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="ordersBody">
+              <tr><td colspan="6" style="text-align:center;color:#999">載入中…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 總覽 ========== -->
+    <div class="panel" id="panel-overview">
+      <div class="card">
+        <h2>訂單總覽</h2>
+        <div class="filter-bar" style="flex-wrap:wrap;gap:8px;align-items:center">
+          <label style="font-size:.85rem">月份</label>
+          <select id="overviewMonth" onchange="loadOverview()" style="min-width:140px">
+            <option value="">全部月份</option>
+          </select>
+          <button class="btn btn-secondary" onclick="loadOverview()">重新整理</button>
+        </div>
+        <div class="status-bar" id="overviewStats"></div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>日子</th>
+                <th>份數</th>
+                <th>訂餐人</th>
+                <th>飯餐摘要</th>
+                <th>合計</th>
+                <th>拎飯人</th>
+              </tr>
+            </thead>
+            <tbody id="overviewBody">
+              <tr><td colspan="6" style="text-align:center;color:#999">載入中…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h2>設定拎飯人（按星期）</h2>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">每星期循環：例如逢星期一固定某人拎飯。</p>
+        <div id="weekdayPickupFields"></div>
+        <button class="btn btn-primary" style="margin-top:10px" onclick="savePickupByWeekday()">儲存各星期拎飯人</button>
+        <p style="font-size:.8rem;color:var(--muted);margin-top:8px">頂部藍色列會自動顯示「今日」對應星期的拎飯人。</p>
+      </div>
+    </div>
+
+    <!-- ========== 欠款 ========== -->
+    <div class="panel" id="panel-payment">
+      <div class="card" style="background:linear-gradient(135deg,#e8f5e9,#f1f8e9);border:1px solid #a5d6a7">
+        <h2 style="color:#2e7d32">💳 PayMe 找數</h2>
+        <p style="font-size:.9rem;margin:8px 0">同事可撳下面連結用 PayMe 轉賬：</p>
+        <p style="font-size:1.05rem;font-weight:700;word-break:break-all">
+          <a href="https://payme.hsbc/stephenhome07" target="_blank" rel="noopener" style="color:#1b5e20">https://payme.hsbc/stephenhome07</a>
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          <button class="btn btn-success" onclick="copyPayMeLink()">📋 複製 PayMe 連結</button>
+          <a class="btn btn-primary" href="https://payme.hsbc/stephenhome07" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">開啟 PayMe</a>
+        </div>
+        <p style="font-size:.75rem;color:var(--muted);margin-top:8px">轉賬後請通知負責人，再由負責人輸入 PIN 標記已付。</p>
+      </div>
+
+      <div class="card">
+        <h2>未付款總覽</h2>
+        <div id="debtList">
+          <div class="loading"><div class="spinner"></div>載入中…</div>
+        </div>
+        <button class="btn btn-secondary" style="margin-top:12px" onclick="loadDebts()">重新整理</button>
+      </div>
+
+      <div class="card">
+        <h2>按同事查欠款（可篩日子／月份）</h2>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">
+          例：今日已食 3、4、7、8 日，但 9、11、23 日已預先落訂——可只選已食日子計欠款，或一齊睇預訂單。
+        </p>
+        <div class="row">
+          <div>
+            <label>同事 Initial</label>
+            <select id="debtPersonSelect" onchange="onDebtFilterChange()">
+              <option value="">— 請選擇 —</option>
+            </select>
+          </div>
+          <div>
+            <label>月份快速選</label>
+            <select id="debtMonthSelect" onchange="onDebtMonthChange()">
+              <option value="">— 唔限月份 —</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:10px">
+          <label>日子（可多選：Ctrl／Cmd 點選，或拖曳）</label>
+          <select id="debtDateSelect" multiple size="6" onchange="renderDebtPersonDetail()"
+            style="width:100%;min-height:120px;padding:8px;border-radius:8px;border:1px solid var(--border);font-size:.9rem">
+          </select>
+          <p style="font-size:.75rem;color:var(--muted);margin-top:4px">
+            留空 = 顯示該人全部未付日子　·　選月份會自動剔該月所有有單日子
+          </p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          <button class="btn btn-secondary" onclick="debtSelectPastOnly()">只選今日或之前（已食）</button>
+          <button class="btn btn-secondary" onclick="debtSelectFutureOnly()">只選未來（預先落訂）</button>
+          <button class="btn btn-secondary" onclick="debtSelectAllDates()">全選有單日子</button>
+          <button class="btn btn-secondary" onclick="debtClearDates()">清除日子選擇</button>
+        </div>
+        <div id="debtPersonDetail" style="margin-top:14px"></div>
+      </div>
+    </div>
+
+    <!-- ========== 匯出 WhatsApp ========== -->
+    <div class="panel" id="panel-export">
+      <div class="card">
+        <h2>一鍵產生 WhatsApp 落單訊息</h2>
+        <label>選擇要匯出的日子</label>
+        <select id="exportDate" onchange="generateExport()"></select>
+        <div class="export-box">
+          <div style="font-size:.85rem;color:#166534;margin-bottom:4px">預覽（可直接複製）</div>
+          <textarea id="exportText" readonly></textarea>
+          <button class="btn btn-success btn-block" onclick="copyExport()">📋 複製到剪貼簿</button>
+          <button class="btn btn-primary btn-block" style="margin-top:8px" onclick="lockOrdersUntilExportDate()">🔒 鎖定訂單（所選日子及之前不可再改）</button>
+          <button class="btn btn-secondary btn-block" style="margin-top:8px" onclick="unlockOrders()">🔓 解除鎖定（需 PIN）</button>
+          <p id="orderLockStatus" style="font-size:.85rem;margin-top:8px;color:var(--danger);font-weight:600"></p>
+        </div>
+        <p style="font-size:.8rem;color:var(--muted);margin-top:10px">
+          預設備註：12:15-12:45 送到。鎖定後，同事不能再新增／修改／取消「鎖定日及之前」的訂單。
+        </p>
+      </div>
+
+      <div class="card" style="text-align:center">
+        <h2>公司過數 QR Code</h2>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">掃描下方 QR Code 過數給公司</p>
+        <a href="https://drive.google.com/file/d/1LkWesF9_YGDH0hdciN0OI03jwpSAWnXX/view?usp=drive_link" target="_blank" rel="noopener">
+          <img
+            src="https://drive.google.com/uc?export=view&amp;id=1LkWesF9_YGDH0hdciN0OI03jwpSAWnXX"
+            alt="過數 QR Code"
+            style="max-width:260px;width:100%;height:auto;border-radius:12px;border:1px solid var(--border);background:#fff"
+            onerror="this.style.display='none';this.nextElementSibling.style.display='block'"
+          />
+          <p style="display:none;font-size:.9rem;color:var(--danger);margin-top:8px">圖片暫時無法顯示，請撳下方連結開啟</p>
+        </a>
+        <p style="margin-top:10px">
+          <a href="https://drive.google.com/file/d/1LkWesF9_YGDH0hdciN0OI03jwpSAWnXX/view?usp=drive_link"
+             target="_blank" rel="noopener"
+             style="font-size:.85rem;color:var(--primary);word-break:break-all">
+            開啟 QR Code 原圖（Google Drive）
+          </a>
+        </p>
+        <div id="exportDayTotalBox" style="margin-top:16px;padding:14px;background:#fef2f2;border-radius:12px;border:1px solid #fecaca">
+          <div style="font-size:.85rem;color:var(--muted)">所選日子應收合計（已計批量優惠）</div>
+          <div id="exportDayTotal" style="font-size:1.6rem;font-weight:800;color:var(--primary);margin-top:4px">$0</div>
+          <div id="exportDayTotalMeta" style="font-size:.8rem;color:var(--muted);margin-top:4px"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>一鍵 Email 通知今日訂飯同事</h2>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">
+          會寄去 <strong>initial@hoyu.edu.hk</strong>（例如 CKH → ckh@hoyu.edu.hk）。<br>
+          內容包括：今日餐飲、應付（含舊欠）、PayMe、未來一星期訂飯、10:00 前訂飯提醒。
+        </p>
+        <label>通知邊一日？</label>
+        <select id="emailNotifyDate"></select>
+        <label style="margin-top:10px;display:flex;align-items:center;gap:8px;font-weight:500">
+          <input type="checkbox" id="emailOnlyUnpaid" style="width:auto" />
+          只通知「該日仍未付款」的同事
+        </label>
+        <button type="button" class="btn btn-primary btn-block" style="margin-top:12px" id="btnSendEmails" onclick="sendTodayOrderEmails()">
+          📧 一鍵發送 Email
+        </button>
+        <div id="emailSendResult" style="margin-top:10px;font-size:.85rem;display:none"></div>
+      </div>
+    </div>
+
+    <!-- ========== 管理 ========== -->
+    <div class="panel" id="panel-admin">
+      <div class="card">
+        <h2>拎飯人（按星期）</h2>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:8px">與總覽相同設定，儲存後每星期自動套用。</p>
+        <div id="weekdayPickupFieldsAdmin"></div>
+        <button class="btn btn-primary" style="margin-top:10px" onclick="savePickupByWeekday()">儲存各星期拎飯人</button>
+        <p style="font-size:.85rem;margin-top:10px">今日拎飯：<strong id="adminPickupToday">—</strong></p>
+      </div>
+      <div class="card">
+        <h2>菜單匯入（下個月用）</h2>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">
+          用 AI 把新菜單圖片轉成 JSON，貼到下方，按「匯入」。
+        </p>
+        <textarea id="importJson" rows="8" placeholder='[{"date":"2025-11-03","code":"A","name":"清湯牛腩飯","price":52}, ...]'></textarea>
+        <button class="btn btn-primary" style="margin-top:8px" onclick="importMenus(false)">➕ 追加匯入菜單（保留舊月份）</button>
+        <button class="btn btn-danger" style="margin-top:8px" onclick="importMenus(true)">🔄 覆蓋全部菜單（需 PIN）</button>
+        <button class="btn btn-secondary" style="margin-top:8px" onclick="showPrompt()">顯示 AI Prompt（複製用）</button>
+        <div id="promptBox" class="hidden" style="margin-top:12px">
+          <textarea id="aiPrompt" rows="16" readonly style="font-size:.8rem"></textarea>
+          <button class="btn btn-success btn-block" style="margin-top:8px" onclick="copyPrompt()">📋 複製 Prompt</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Firebase 資料庫管理與備份</h2>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">
+          可隨時匯出完整 Firebase 資料庫備份（JSON），或上載 <code>firebase_import.json</code> 還原舊資料（匯入需管理 PIN）。
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-success" onclick="exportFullDatabaseJson()">⬇️ 下載完整資料庫備份 (JSON)</button>
+          <label class="btn btn-secondary" style="margin:0;cursor:pointer">
+            ⬆️ 從 JSON 檔匯入至 Firebase
+            <input type="file" accept=".json" style="display:none" onchange="importFullDatabaseJson(event)" />
+          </label>
+        </div>
+      </div>
+      <div class="card">
+        <h2>系統</h2>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:8px">
+          管理 PIN（標已付／刪舊單／匯入備份）寫在程式 <code>ADMIN_PIN</code>（目前為 0727）。要讓全校同事打開 GitHub Pages 即自動連上 Firebase，請把 Database URL 填入 <code>index.html</code> 內的 <code>DEFAULT_FIREBASE_DB_URL</code>。
+        </p>
+        <button class="btn btn-secondary" onclick="document.getElementById('configBox').classList.remove('hidden'); window.scrollTo({top:0,behavior:'smooth'});">🔥 設定 Firebase / Email 網址</button>
+        <button class="btn btn-secondary" onclick="clearLocalCache()">清除本機快取</button>
+        <button class="btn btn-primary" style="margin-top:8px" onclick="hardResetSite()">🔧 清除快取並強制重載</button>
+      </div>
+    </div>
+  </div>
+
+  
+  <div class="submit-overlay" id="submitOverlay" aria-live="assertive">
+    <div class="submit-overlay-box">
+      <div class="spinner-lg"></div>
+      <div style="font-size:1.1rem;font-weight:700;color:var(--primary)">正在落單…</div>
+      <p style="font-size:.85rem;color:var(--muted);margin-top:8px;line-height:1.4">請勿關閉或重複撳掣<br>稍等幾秒即可完成</p>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ===================== 菜單（由 Google Sheet 載入） =====================
+    // date -> [{code, name, price}, ...]
+    // 固定套餐用 date = "*" 表示每日供應
+    let MENUS = {};          // 按日菜單
+    let SET_MENUS = [];      // 固定套餐（每日）
+    let menusLoaded = false;
+
+    // 飲品免費；只有凍飲 +$3
+    const TAKEAWAY_FEE = 1;   // 每單外賣 +$1
+    const COLD_EXTRA = 3;     // 凍飲額外 +$3
+    const BOTTLE_TEA_EXTRA = 5; // 津路烏龍茶升級 +$5
+    // 批量優惠：滿5 −$2、滿10 −$4、滿15 −$6（每飯）
+    const BULK_TIERS = [
+      { min: 15, discount: 6 },
+      { min: 10, discount: 4 },
+      { min: 5, discount: 2 }
+    ];
+    const BULK_THRESHOLD = 5; // 最低門檻（顯示用）
+    const BULK_DISCOUNT = 2;  // 兼容舊代碼的預設
+    // 管理 PIN（4位）：標已付、刪除舊單需輸入。可自行改此數字
+    const ADMIN_PIN = '0727';
+    const PAYME_URL = 'https://payme.hsbc/stephenhome07';
+
+    // ===================== 狀態（Firebase 雲端資料庫版） =====================
+    // 【部署至 GitHub 前建議填寫】把你的 Firebase Realtime Database 網址貼在下方引號內，全校同事打開網頁即自動連上！
+    // 例如：'https://hoyu-lunch-default-rtdb.asia-southeast1.firebasedatabase.app'
+    const DEFAULT_FIREBASE_DB_URL = 'https://hoyu-lunch-default-rtdb.asia-southeast1.firebasedatabase.app/';
+    // 【選填】用於發送 @hoyu.edu.hk 電郵通知的 Google Apps Script 網址（預設保留你原本的 GAS 網址）
+    const DEFAULT_MAIL_GAS_URL = 'https://script.google.com/macros/s/AKfycbzeHpG7knP3E5yZvLblWAY_NT-nwhs9FZLT7_4li9PVJGQAL45o1WEWCyt1krC1_Utd/exec';
+
+    function cleanFbUrl(u) {
+      if (!u) return '';
+      return String(u).trim().replace(/\/+$/, '').replace(/\.json$/i, '');
+    }
+
+    let apiUrl = cleanFbUrl(DEFAULT_FIREBASE_DB_URL);
+    let mailGasUrl = DEFAULT_MAIL_GAS_URL;
+    try {
+      const savedFb = cleanFbUrl(localStorage.getItem('lunch_firebase_url') || '');
+      if (savedFb && /^https:\/\/.+(firebaseio\.com|firebasedatabase\.app)$/i.test(savedFb)) {
+        apiUrl = savedFb;
+      } else if (DEFAULT_FIREBASE_DB_URL) {
+        apiUrl = cleanFbUrl(DEFAULT_FIREBASE_DB_URL);
+        localStorage.setItem('lunch_firebase_url', apiUrl);
+      }
+      const savedMail = (localStorage.getItem('lunch_mail_gas_url') || '').trim();
+      if (savedMail) mailGasUrl = savedMail;
+    } catch (e) {}
+
+    function isInAppBrowser() {
+      const ua = navigator.userAgent || '';
+      return /FBAN|FBAV|Instagram|Line\/|MicroMessenger|WhatsApp|FB_IAB|Twitter/i.test(ua);
+    }
+    let selectedMeal = null;
+    let localOrders = JSON.parse(localStorage.getItem('lunch_orders') || '[]');
+    let pickupPerson = localStorage.getItem('lunch_pickup') || '';
+    let knownInitials = JSON.parse(localStorage.getItem('lunch_initials') || '[]');
+    // 每人飲品習慣：{ CKH: { drink, ice, sweet, drinkNote } }
+    let drinkPrefs = JSON.parse(localStorage.getItem('lunch_drink_prefs') || '{}');
+
+    // ===================== 初始化 =====================
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('todayLabel').textContent = formatDateLabel(new Date());
+      if (apiUrl) document.getElementById('configBox').classList.add('hidden');
+      else document.getElementById('configBox').classList.remove('hidden');
+      document.getElementById('apiUrlInput').value = apiUrl;
+      const mailInp = document.getElementById('mailGasUrlInput');
+      if (mailInp) mailInp.value = mailGasUrl;
+
+      refreshPickupDisplay();
+      renderWeekdayPickupFields();
+      updateOrderLockBanner();
+      const od = document.getElementById('orderDate');
+      if (od) od.addEventListener('change', updateOrderLockBanner);
+
+      setupTabs();
+      setupDrinkToggle();
+      setupMealChange();
+      populateInitials();
+      buildSetupHelp();
+      buildAiPrompt();
+
+      if (!apiUrl) {
+        showConnBar('ℹ️ 請先於上方輸入 Firebase Realtime Database URL 以啟用雲端同步（目前為本機預覽模式）。', 'warn');
+        populateDateSelects();
+        renderMeals();
+        loadOrders();
+        loadDebts();
+        generateExport();
+        return;
+      }
+
+      (async () => {
+        const ok = await testConnection();
+        await loadRemoteSettings();
+        startOrderLockPolling();
+        startRealtimeSync();
+        await loadMenus();
+        populateDateSelects();
+        renderMeals();
+        await loadOrders();
+        learnDrinkPrefsFromOrders();
+        await loadDebts();
+        generateExport();
+        applyDrinkPrefForInitial();
+        if (!ok) {
+          showConnBar('❌ 無法連接 Firebase。請檢查 Database URL 是否正確，以及 Firebase 安全規則 (Rules) 是否已開放讀寫。', 'err');
+        }
+      })();
+    });
+
+    function formatDateLabel(d) {
+      const days = ['日','一','二','三','四','五','六'];
+      return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}（${days[d.getDay()]}）`;
+    }
+
+    function toDateKey(d) {
+      // 用本地時區（香港），避免 toISOString UTC 差一日
+      const x = d instanceof Date ? d : new Date(d);
+      const y = x.getFullYear();
+      const m = String(x.getMonth() + 1).padStart(2, '0');
+      const day = String(x.getDate()).padStart(2, '0');
+      return y + '-' + m + '-' + day;
+    }
+
+    function populateDateSelects() {
+      // 只顯示真正日子（排除 * / FIXED / 每天）
+      const allDates = Object.keys(MENUS).filter(d => d && d !== '*' && d !== 'FIXED' && d !== '每天').sort();
+      const today = toDateKey(new Date());
+      // 落單：只今日及以後；今日訂單／匯出：可睇歷史
+      const bySelect = {
+        orderDate: allDates.filter(d => d >= today),
+        filterDate: allDates.slice(),
+        exportDate: allDates.slice()
+      };
+      Object.keys(bySelect).forEach(id => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        const prev = sel.value;
+        const dates = bySelect[id];
+        sel.innerHTML = '';
+        if (!dates.length) {
+          const opt = document.createElement('option');
+          opt.value = '';
+          opt.textContent = id === 'orderDate'
+            ? '（沒有今日或之後的菜單）'
+            : '（未載入菜單，請先連接 Firebase 或匯入菜單）';
+          sel.appendChild(opt);
+          return;
+        }
+        dates.forEach(dk => {
+          const d = new Date(dk + 'T12:00:00');
+          const opt = document.createElement('option');
+          opt.value = dk;
+          let label = isNaN(d.getTime()) ? dk : formatDateLabel(d);
+          if (id === 'orderDate' && isOrderDateLocked(dk)) {
+            label += ' 🔒已鎖定';
+            opt.disabled = true;
+          }
+          opt.textContent = label;
+          sel.appendChild(opt);
+        });
+        // 預設：今日（若未鎖）或下一個可選日子
+        if (dates.includes(prev) && !(id === 'orderDate' && isOrderDateLocked(prev))) {
+          sel.value = prev;
+        } else if (id === 'orderDate') {
+          const pick = dates.find(d => !isOrderDateLocked(d)) || dates.find(d => d >= today) || dates[0];
+          sel.value = pick || '';
+        } else if (dates.includes(today)) {
+          sel.value = today;
+        } else {
+          const future = dates.find(d => d >= today);
+          sel.value = future || dates[dates.length - 1];
+        }
+      });
+      const od = document.getElementById('orderDate');
+      if (od) {
+        od.onchange = function() {
+          renderMeals();
+          updateOrderLockBanner();
+        };
+      }
+      // Email 通知日子同步
+      const emailDateSel = document.getElementById('emailNotifyDate');
+      const exportSel = document.getElementById('exportDate');
+      if (emailDateSel && exportSel) {
+        emailDateSel.innerHTML = exportSel.innerHTML;
+        emailDateSel.value = exportSel.value;
+      }
+      updateOrderLockBanner();
+    }
+
+    function populateInitials() {
+      const list = document.getElementById('initialList');
+      list.innerHTML = '';
+      knownInitials.forEach(i => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        list.appendChild(opt);
+      });
+    }
+
+    function setupTabs() {
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+          document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+          tab.classList.add('active');
+          document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+          if (tab.dataset.tab === 'order') { loadRemoteSettings(); updateOrderLockBanner(); }
+          if (tab.dataset.tab === 'orders') loadOrders();
+          if (tab.dataset.tab === 'overview') loadOverview();
+          if (tab.dataset.tab === 'payment') loadDebts();
+          if (tab.dataset.tab === 'export') generateExport();
+        });
+      });
+    }
+
+    function setupDrinkToggle() {
+      document.getElementById('drinkSelect').addEventListener('change', () => {
+        const v = document.getElementById('drinkSelect').value;
+        // 只有凍飲先要冰量／甜度；樽裝烏龍茶唔使
+        const needOpts = v && v.startsWith('凍');
+        document.getElementById('drinkOpts').style.display = needOpts ? 'grid' : 'none';
+        calcPrice();
+        // 即時記住（改飲品時）
+        saveDrinkPrefFromForm();
+      });
+      document.getElementById('iceLevel').addEventListener('change', () => { calcPrice(); saveDrinkPrefFromForm(); });
+      document.getElementById('sweetLevel').addEventListener('change', () => { calcPrice(); saveDrinkPrefFromForm(); });
+      const dn = document.getElementById('drinkNote');
+      if (dn) dn.addEventListener('change', saveDrinkPrefFromForm);
+
+      const ini = document.getElementById('userInitial');
+      ini.addEventListener('change', () => applyDrinkPrefForInitial());
+      ini.addEventListener('blur', () => applyDrinkPrefForInitial());
+      // 用 datalist 選完有時只觸發 input
+      let _iniTimer = null;
+      ini.addEventListener('input', () => {
+        clearTimeout(_iniTimer);
+        _iniTimer = setTimeout(() => applyDrinkPrefForInitial(), 400);
+      });
+    }
+
+    function saveDrinkPrefFromForm() {
+      const initial = document.getElementById('userInitial').value.trim().toUpperCase();
+      if (!initial) return;
+      const drink = document.getElementById('drinkSelect').value;
+      // 即使唔要飲品都記住（下次照樣唔要）
+      drinkPrefs[initial] = {
+        drink: drink || '',
+        ice: document.getElementById('iceLevel').value || '正常',
+        sweet: document.getElementById('sweetLevel').value || '正常',
+        drinkNote: (document.getElementById('drinkNote').value || '').trim()
+      };
+      try { localStorage.setItem('lunch_drink_prefs', JSON.stringify(drinkPrefs)); } catch (e) {}
+    }
+
+    function applyDrinkPrefForInitial() {
+      const initial = document.getElementById('userInitial').value.trim().toUpperCase();
+      if (!initial) return;
+      const pref = drinkPrefs[initial];
+      if (!pref) {
+        // 試從歷史訂單推斷
+        const hist = localOrders.filter(o => String(o.initial).toUpperCase() === initial && o.drink)
+          .sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
+        if (hist.length) {
+          const parsed = parseDrinkString(hist[0].drink);
+          if (parsed) {
+            drinkPrefs[initial] = parsed;
+            try { localStorage.setItem('lunch_drink_prefs', JSON.stringify(drinkPrefs)); } catch (e) {}
+          }
+        }
+      }
+      const p = drinkPrefs[initial];
+      if (!p) return;
+      const sel = document.getElementById('drinkSelect');
+      // 確認選項存在
+      const hasOpt = [...sel.options].some(o => o.value === p.drink);
+      if (p.drink && hasOpt) {
+        sel.value = p.drink;
+      } else if (!p.drink) {
+        sel.value = '';
+      }
+      document.getElementById('drinkOpts').style.display = sel.value ? 'grid' : 'none';
+      if (p.ice) {
+        const ice = document.getElementById('iceLevel');
+        if ([...ice.options].some(o => o.value === p.ice)) ice.value = p.ice;
+      }
+      if (p.sweet) {
+        const sw = document.getElementById('sweetLevel');
+        if ([...sw.options].some(o => o.value === p.sweet)) sw.value = p.sweet;
+      }
+      if (p.drinkNote != null) document.getElementById('drinkNote').value = p.drinkNote;
+      calcPrice();
+    }
+
+    /** 從訂單字串還原，例如「凍奶茶（少冰・少糖） 走茶漬」 */
+    function parseDrinkString(str) {
+      if (!str || typeof str !== 'string') return null;
+      const s = str.trim();
+      // 凍奶茶（少冰・少糖） or 凍奶茶（少冰・少糖） note
+      const m = s.match(/^(.+?)(?:（([^）]+)）)?(?:\s+(.+))?$/);
+      if (!m) return { drink: s, ice: '正常', sweet: '正常', drinkNote: '' };
+      let drink = (m[1] || '').trim();
+      let ice = '正常', sweet = '正常';
+      const mid = m[2] || '';
+      if (mid) {
+        const parts = mid.split(/[・·‧/／,，\s]+/).filter(Boolean);
+        parts.forEach(p => {
+          if (/冰|走冰/.test(p)) ice = p;
+          else if (/糖|甜/.test(p)) sweet = p;
+        });
+      }
+      // 對齊 select options
+      const drinkSel = document.getElementById('drinkSelect');
+      if (drinkSel && ![...drinkSel.options].some(o => o.value === drink)) {
+        // 模糊：凍奶茶
+        const found = [...drinkSel.options].find(o => o.value && drink.indexOf(o.value) >= 0);
+        if (found) drink = found.value;
+      }
+      return { drink, ice, sweet, drinkNote: (m[3] || '').trim() };
+    }
+
+    function setupMealChange() {
+      // handled in renderMeals
+    }
+
+    // ===================== 菜單渲染 =====================
+    function renderMeals() {
+      const date = document.getElementById('orderDate').value;
+      const meals = MENUS[date] || [];
+      const container = document.getElementById('mealList');
+      const setBox = document.getElementById('setOptions');
+
+      if (!date) {
+        container.innerHTML = '<p style="color:#999">請先連接 Firebase 並於「管理」匯入菜單（或還原 firebase_import.json）。</p>';
+        setBox.innerHTML = '';
+        return;
+      }
+      if (!meals.length && !SET_MENUS.length) {
+        container.innerHTML = '<p style="color:#999">此日無菜單資料（請檢查 Menus 工作表的 date 欄）</p>';
+        setBox.innerHTML = '';
+        return;
+      }
+
+      container.innerHTML = meals.length ? meals.map(m => `
+        <label class="meal-item" data-code="${m.code}" data-name="${m.name}" data-price="${m.price}">
+          <input type="radio" name="meal" value="${m.code}" />
+          <span class="meal-code">${m.code}.</span>
+          <span class="meal-name">${m.name}</span>
+          <span class="meal-price">$${m.price}</span>
+        </label>
+      `).join('') : '<p style="color:#999;font-size:.9rem">此日無 A–G 菜單</p>';
+
+      // 套餐選項欄
+      let optHtml = '<div class="set-options-panel" id="setOptionsPanel"><h4>套餐選項</h4><div id="setOptionsFields"></div></div>';
+      if (SET_MENUS.length) {
+        setBox.innerHTML = `
+          <div class="set-box">
+            <h3>固定套餐（每日供應）· 共 ${SET_MENUS.length} 款</h3>
+            <div class="meal-grid">
+              ${SET_MENUS.map(m => `
+                <label class="meal-item" data-code="${m.code}" data-name="${m.name}" data-price="${m.price}" data-isset="1">
+                  <input type="radio" name="meal" value="${m.code}" />
+                  <span class="meal-code">套</span>
+                  <span class="meal-name">${m.name}</span>
+                  <span class="meal-price">$${m.price}</span>
+                </label>
+              `).join('')}
+            </div>
+            ${optHtml}
+          </div>
+        `;
+      } else {
+        setBox.innerHTML = '<p style="font-size:.85rem;color:#999;margin-top:8px">未載入固定套餐（Menus 表 date 填 * 且 code 如 SET1）</p>';
+      }
+
+      document.querySelectorAll('.meal-item input').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+          document.querySelectorAll('.meal-item').forEach(el => el.classList.remove('selected'));
+          e.target.closest('.meal-item').classList.add('selected');
+          const item = e.target.closest('.meal-item');
+          selectedMeal = {
+            code: item.dataset.code,
+            name: item.dataset.name,
+            price: parseInt(item.dataset.price, 10),
+            isSet: item.dataset.isset === '1'
+          };
+          showSetOptions(selectedMeal.code);
+          calcPrice();
+        });
+      });
+      selectedMeal = null;
+      calcPrice();
+    }
+
+
+    // ===================== 唔知食咩好 · 抽獎 =====================
+    let _lotteryPool = [];
+    let _lotteryResult = null;
+    window._lotterySpinning = false;
+
+    function getLotteryPool() {
+      const date = document.getElementById('orderDate').value;
+      const dayMeals = (MENUS[date] || []).filter(m => {
+        const c = String(m.code || '').toUpperCase();
+        return /^[A-G]$/.test(c);
+      });
+      return dayMeals.map(m => ({
+        code: m.code,
+        name: m.name,
+        price: Number(m.price) || 0
+      }));
+    }
+
+    function openMealLottery() {
+      const pool = getLotteryPool();
+      if (!pool.length) {
+        toast('今日未有 A–G 菜單，無法抽獎');
+        return;
+      }
+      _lotteryPool = pool;
+      document.getElementById('lotteryOverlay').classList.add('show');
+      startMealLottery();
+    }
+
+    function closeMealLottery() {
+      if (window._lotterySpinning) return;
+      document.getElementById('lotteryOverlay').classList.remove('show');
+      _lotteryResult = null;
+    }
+
+    function startMealLottery() {
+      const pool = _lotteryPool.length ? _lotteryPool : getLotteryPool();
+      if (!pool.length) {
+        toast('今日未有 A–G 菜單');
+        return;
+      }
+      _lotteryPool = pool;
+      window._lotterySpinning = true;
+      _lotteryResult = null;
+      const slot = document.getElementById('lotterySlot');
+      const actions = document.getElementById('lotteryActions');
+      const hint = document.getElementById('lotteryHint');
+      actions.style.display = 'none';
+      slot.classList.remove('done');
+      slot.classList.add('spinning');
+      hint.textContent = '正在從當日 A–G 抽出…';
+
+      const duration = 3000 + Math.floor(Math.random() * 2000); // 3–5 秒
+      const start = Date.now();
+      let i = 0;
+      const tick = () => {
+        if (!window._lotterySpinning) return;
+        const m = pool[i % pool.length];
+        slot.innerHTML = `<span style="font-size:1.1em">${m.code}.</span> ${m.name}<br><small style="font-weight:600;opacity:.85">$${m.price}</small>`;
+        i++;
+        const elapsed = Date.now() - start;
+        if (elapsed >= duration) {
+          // 最終結果
+          const result = pool[Math.floor(Math.random() * pool.length)];
+          _lotteryResult = result;
+          window._lotterySpinning = false;
+          slot.classList.remove('spinning');
+          slot.classList.add('done');
+          slot.innerHTML = `🎉 <span style="font-size:1.15em">${result.code}.</span> ${result.name}<br><small style="font-weight:600">$${result.price}</small>`;
+          hint.textContent = '抽中啦！確認選取，或再抽一次';
+          actions.style.display = 'flex';
+          return;
+        }
+        // 越近完場越慢
+        const progress = elapsed / duration;
+        const delay = progress < 0.6 ? 60 : (progress < 0.85 ? 120 : 200);
+        setTimeout(tick, delay);
+      };
+      tick();
+    }
+
+    function confirmLotteryMeal() {
+      if (!_lotteryResult || window._lotterySpinning) return;
+      const result = _lotteryResult;
+      // 選中對應 radio
+      const radio = document.querySelector('.meal-item input[value="' + result.code + '"]')
+        || document.querySelector('.meal-item[data-code="' + result.code + '"] input');
+      if (radio) {
+        radio.checked = true;
+        radio.dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        // 後備：直接寫 selectedMeal
+        document.querySelectorAll('.meal-item').forEach(el => el.classList.remove('selected'));
+        selectedMeal = { code: result.code, name: result.name, price: result.price, isSet: false };
+        const item = document.querySelector('.meal-item[data-code="' + result.code + '"]');
+        if (item) item.classList.add('selected');
+        calcPrice();
+      }
+      closeMealLottery();
+      toast('已選：' + result.code + '. ' + result.name);
+      // 捲去價錢確認
+      const sum = document.getElementById('priceSummary');
+      if (sum) sum.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function showSetOptions(code) {
+      const panel = document.getElementById('setOptionsPanel');
+      const fields = document.getElementById('setOptionsFields');
+      if (!panel || !fields) return;
+      const cfg = SET_CHOICES[code];
+      if (!cfg) {
+        panel.classList.remove('visible');
+        fields.innerHTML = '';
+        return;
+      }
+      panel.classList.add('visible');
+      if (cfg.multi) {
+        fields.innerHTML = cfg.multi.map(g => `
+          <div style="margin-bottom:8px">
+            <label>${g.label}</label>
+            <select class="set-opt" data-key="${g.key}">
+              ${g.options.map(o => '<option value="'+o+'">'+o+'</option>').join('')}
+            </select>
+          </div>
+        `).join('');
+      } else {
+        fields.innerHTML = `
+          <label>${cfg.label}</label>
+          <select class="set-opt" data-key="choice">
+            ${cfg.options.map(o => '<option value="'+o+'">'+o+'</option>').join('')}
+          </select>
+        `;
+      }
+    }
+
+    function getSetOptionText() {
+      const selects = document.querySelectorAll('.set-opt');
+      if (!selects.length) return '';
+      const parts = [];
+      selects.forEach(s => {
+        const key = s.dataset.key;
+        parts.push((key && key !== 'choice' ? key + ':' : '') + s.value);
+      });
+      return parts.join(' / ');
+    }
+
+    async function loadMenus() {
+      MENUS = {};
+      SET_MENUS = [];
+      let rows = null;
+      let errMsg = '';
+      if (apiUrl) {
+        try {
+          rows = await callApi('getMenus');
+          if (!Array.isArray(rows)) {
+            errMsg = 'getMenus 回傳格式不正確';
+            rows = null;
+          }
+        } catch (e) {
+          console.warn('getMenus failed', e);
+          errMsg = e.message || String(e);
+          toast('無法從 Firebase 載入菜單：' + errMsg);
+        }
+      }
+      if (!rows || !rows.length) {
+        try {
+          const saved = localStorage.getItem('lunch_menus_cache');
+          if (saved) rows = JSON.parse(saved);
+        } catch (e) {}
+      }
+      if (!rows || !rows.length) {
+        menusLoaded = false;
+        const box = document.getElementById('mealList');
+        if (box) {
+          box.innerHTML = '<p style="color:#b91c1c">未能載入菜單。<br>' +
+            (apiUrl
+              ? '請確認：① Firebase Database URL 正確 ② 已匯入菜單或 firebase_import.json ③ Database Rules 允許讀取<br>錯誤：' + (errMsg || '無資料')
+              : '請先設定 Firebase Database URL') + '</p>';
+        }
+        return;
+      }
+      applyMenuRows(rows);
+      localStorage.setItem('lunch_menus_cache', JSON.stringify(rows));
+      menusLoaded = true;
+      console.log('Menus loaded:', Object.keys(MENUS).length, 'days,', SET_MENUS.length, 'sets');
+    }
+
+    // 套餐可選細項（點飯時多一欄）
+    const SET_CHOICES = {
+      SET1: { label: '配料（選一）', options: ['特級墨魚王', '特級牛丸', '雞扒', '豬扒', '雞亦', '生炸雞脾（+$3）'] },
+      SET2: { label: '餃子（選一，每款3只）', options: ['鮮蝦雲吞', '鳳城水餃', '韭菜餃', '椰菜餃'] },
+      SET3: { label: '配料（選一，雙拼+$8）', options: ['特級墨魚王', '特級牛丸', '雙拼墨魚王+牛丸（+$8）'] },
+      SET4: { label: '餃子（選一，每款4只）', options: ['鮮蝦雲吞', '鳳城水餃', '韭菜餃', '椰菜餃'] },
+      SET5: { label: '快餐組合', multi: [
+        { key: 'main', label: '主菜', options: ['雞扒', '豬扒', '魚柳'] },
+        { key: 'side', label: '配菜', options: ['火腿', '腸', '蛋', '餐肉'] },
+        { key: 'carb', label: '跟', options: ['飯', '意粉'] },
+        { key: 'sauce', label: '汁', options: ['黑椒汁', '茄汁', '白汁'] }
+      ]},
+      SET6: { label: '午餐', options: ['標準（雪菜肉絲麵+火腿奄列+牛油方包）'] },
+      SET7: { label: '主菜（選一）', options: ['雞扒', '豬扒', '魚柳', '雞亦', '生炸雞脾（+$3）'] },
+      SET8: { label: '炒粉麵（選一）', options: ['楊州炒飯', '咸魚雞粒炒飯', '生炒牛肉飯', '星洲炒米', '廈門炒米', '雪菜肉絲炆米', '干炒牛河', '豉油皇三絲炒麵', '西炒飯', '咸魚叉燒粒炒飯'] }
+    };
+
+    function applyMenuRows(rows) {
+      MENUS = {};
+      SET_MENUS = [];
+      rows.forEach(r => {
+        let date = String(r.date != null ? r.date : '').trim();
+        const code = String(r.code != null ? r.code : '').trim();
+        const name = String(r.name != null ? r.name : '').trim();
+        const price = Number(r.price);
+        if (!code || !name || isNaN(price)) return;
+        const item = { code, name, price };
+        // 固定套餐：date 為 * / FIXED / 每天 / 空白，或 code 以 SET 開頭
+        const isSet = !date || date === '*' || date === 'FIXED' || date === '每天'
+          || date === '固定' || /^SET/i.test(code);
+        if (isSet) {
+          // 避免重複
+          if (!SET_MENUS.find(x => x.code === code)) SET_MENUS.push(item);
+        } else {
+          const dk = normalizeDate(date);
+          if (!dk || dk === '*') {
+            if (!SET_MENUS.find(x => x.code === code)) SET_MENUS.push(item);
+          } else {
+            if (!MENUS[dk]) MENUS[dk] = [];
+            MENUS[dk].push(item);
+          }
+        }
+      });
+    }
+
+    function normalizeDate(s) {
+      if (s == null || s === '') return '';
+      // Google Sheets Date → 有時係 Date 物件序列化後嘅 ISO 字串
+      if (s instanceof Date || (typeof s === 'object' && s.getFullYear)) {
+        const d = new Date(s);
+        if (!isNaN(d.getTime())) {
+          // 用本地日期，避免 UTC 令日子少一日
+          const y = d.getFullYear();
+          const mo = String(d.getMonth() + 1).padStart(2, '0');
+          const da = String(d.getDate()).padStart(2, '0');
+          return y + '-' + mo + '-' + da;
+        }
+      }
+      s = String(s).trim();
+      // ISO: 2026-10-02T00:00:00.000Z 或 2026-10-01T16:00:00.000Z
+      if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
+        // 以 Asia/Hong_Kong 理解：取 UTC+8 嘅曆日
+        const d = new Date(s);
+        if (!isNaN(d.getTime())) {
+          // 轉成 HKT 午夜對應嘅年月日
+          const hkt = new Date(d.getTime() + 8 * 3600 * 1000);
+          const y = hkt.getUTCFullYear();
+          const mo = String(hkt.getUTCMonth() + 1).padStart(2, '0');
+          const da = String(hkt.getUTCDate()).padStart(2, '0');
+          return y + '-' + mo + '-' + da;
+        }
+      }
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      let m = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+      if (m) return m[1] + '-' + m[2].padStart(2,'0') + '-' + m[3].padStart(2,'0');
+      m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+      if (m) {
+        let y = m[3];
+        if (y.length === 2) y = '20' + y;
+        return y + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0');
+      }
+      return s;
+    }
+
+    function getDrinkPrice(drink) {
+      // 飲品免費；凍飲 +$3；津路烏龍茶 +$5
+      if (!drink) return 0;
+      if (drink === '津路烏龍茶' || drink.indexOf('津路') >= 0) return BOTTLE_TEA_EXTRA;
+      if (drink.startsWith('凍')) return COLD_EXTRA;
+      return 0;
+    }
+
+    function calcPrice() {
+      const mealP = selectedMeal ? selectedMeal.price : 0;
+      const drink = document.getElementById('drinkSelect').value;
+      const drinkP = getDrinkPrice(drink);
+      const takeaway = mealP > 0 ? TAKEAWAY_FEE : 0;
+      const total = mealP + takeaway + drinkP;
+      document.getElementById('sumMeal').textContent = '$' + mealP;
+      document.getElementById('sumTakeaway').textContent = takeaway ? '+$' + takeaway : '$0';
+      document.getElementById('sumDrink').textContent = drinkP
+        ? ('+$' + drinkP + (drink.indexOf('津路') >= 0 ? '（烏龍茶升級）' : '（凍飲）'))
+        : (drink ? '免費' : '$0');
+      document.getElementById('sumTotal').textContent = '$' + total;
+      document.getElementById('bulkHintRow').style.display = 'none';
+    }
+
+
+    /** 從歷史訂單學習每人最近一次飲品 */
+    function learnDrinkPrefsFromOrders() {
+      const latest = {};
+      localOrders.forEach(o => {
+        if (!o.initial || !o.drink) return;
+        const k = String(o.initial).toUpperCase();
+        const ts = o.timestamp || '';
+        if (!latest[k] || String(ts) > String(latest[k].ts)) {
+          latest[k] = { ts, drink: o.drink };
+        }
+      });
+      Object.keys(latest).forEach(k => {
+        if (drinkPrefs[k] && drinkPrefs[k].drink) return; // 已有手動習慣優先
+        const parsed = parseDrinkString(latest[k].drink);
+        if (parsed) drinkPrefs[k] = parsed;
+      });
+      try { localStorage.setItem('lunch_drink_prefs', JSON.stringify(drinkPrefs)); } catch (e) {}
+    }
+
+    // ===================== 落單 =====================
+    let _submitting = false;
+    let _lastSubmitKey = '';
+    let _lastSubmitAt = 0;
+
+    function showSubmitOverlay(show) {
+      const el = document.getElementById('submitOverlay');
+      if (el) {
+        if (show) el.classList.add('show');
+        else el.classList.remove('show');
+      }
+      const btn = document.getElementById('submitBtn');
+      if (btn) {
+        if (show) {
+          btn.disabled = true;
+          btn.textContent = '提交中…請勿重複撳';
+        } else if (!_submitting) {
+          btn.disabled = false;
+          btn.textContent = '✅ 確認落單';
+        }
+      }
+    }
+
+    async function submitOrder() {
+      // 立刻鎖死，避免 await 期間再撳一次造成 double order
+      if (_submitting) {
+        toast('⏳ 正在落單，請稍候，唔好再撳');
+        showSubmitOverlay(true);
+        return;
+      }
+      const initialEarly = document.getElementById('userInitial').value.trim().toUpperCase();
+      if (!initialEarly) { toast('請輸入 Initial'); return; }
+      if (!selectedMeal) { toast('請選擇飯餐'); return; }
+
+      _submitting = true;
+      showSubmitOverlay(true);
+
+      try {
+      // 提交前再拉一次鎖定狀態（避免其他裝置已鎖但本機未更新）
+      if (apiUrl) {
+        try { await loadRemoteSettings(); } catch (e) {}
+      }
+      const _od = document.getElementById('orderDate').value;
+      if (isOrderDateLocked(_od)) {
+        toast('🔒 此日已鎖定，不能再落單（' + (orderLockUntil || '') + ' 及之前）');
+        updateOrderLockBanner();
+        populateDateSelects();
+        return;
+      }
+      const initial = initialEarly;
+
+      const drink = document.getElementById('drinkSelect').value;
+      const ice = document.getElementById('iceLevel').value;
+      const sweet = document.getElementById('sweetLevel').value;
+      const drinkNote = document.getElementById('drinkNote').value.trim();
+      const note = document.getElementById('orderNote').value.trim();
+      const date = document.getElementById('orderDate').value;
+      const name = document.getElementById('userName').value.trim();
+      const setOpt = getSetOptionText();
+      let mealP = selectedMeal.price;
+      // 生炸雞脾 +$3
+      if (setOpt && setOpt.includes('生炸雞脾')) mealP += 3;
+      if (setOpt && setOpt.includes('雙拼') && setOpt.includes('+$8')) mealP += 8;
+      const mealNameFull = setOpt ? (selectedMeal.name + '（' + setOpt + '）') : selectedMeal.name;
+      const drinkP = getDrinkPrice(drink);
+      const takeaway = TAKEAWAY_FEE;
+      const total = mealP + takeaway + drinkP;
+
+      let drinkStr = '';
+      if (drink) {
+        drinkStr = drink;
+        if (drink.startsWith('凍')) drinkStr += `（${ice}・${sweet}）`;
+        if (drinkNote) drinkStr += ` ${drinkNote}`;
+      }
+
+      const packEl = document.getElementById('orderPack');
+      const pack = Math.min(5, Math.max(1, parseInt(packEl && packEl.value ? packEl.value : '1', 10) || 1));
+      const baseNote = note || (setOpt ? '選項:' + setOpt : '');
+      // 包裝>1 時寫入 note 前綴，方便 Sheet 無 pack 欄都能還原
+      const noteStored = (pack > 1 ? ('【包裝' + pack + '】') : '') + (baseNote || '');
+
+      const order = {
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+        timestamp: new Date().toISOString(),
+        initial,
+        name,
+        date,
+        mealCode: selectedMeal.code,
+        mealName: mealNameFull,
+        mealPrice: mealP,
+        takeawayFee: takeaway,
+        drink: drinkStr,
+        drinkPrice: drinkP,
+        total,
+        paid: false,
+        pack: pack,
+        note: noteStored
+      };
+
+
+      // 防 double：同一人同一日同一飯 60 秒內唔重複提交
+      const dedupeKey = [order.initial, order.date, order.mealCode, order.drink || '', order.note || ''].join('|');
+      const now = Date.now();
+      if (dedupeKey === _lastSubmitKey && (now - _lastSubmitAt) < 60000) {
+        toast('⚠️ 剛才已落過相同訂單，請勿重複提交');
+        return;
+      }
+      // 本機已有極相似未付訂單（10 分鐘內）亦提示
+      const recentDup = localOrders.find(o =>
+        String(o.initial).toUpperCase() === order.initial &&
+        o.date === order.date &&
+        o.mealCode === order.mealCode &&
+        (o.drink || '') === (order.drink || '') &&
+        !o.paid &&
+        o.timestamp && (now - new Date(o.timestamp).getTime()) < 10 * 60 * 1000
+      );
+      if (recentDup) {
+        if (!confirm('系統發現你喺 10 分鐘內已落過相同飯餐。\\n確定要再落一單？（多數係誤撳）')) {
+          return;
+        }
+      }
+      _lastSubmitKey = dedupeKey;
+      _lastSubmitAt = now;
+
+      // 記住 initial
+      if (!knownInitials.includes(initial)) {
+        knownInitials.push(initial);
+        localStorage.setItem('lunch_initials', JSON.stringify(knownInitials));
+        populateInitials();
+      }
+
+      // 本地儲存
+      localOrders.push(order);
+      localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
+
+      // 如果有 API，同步到 Sheets
+      if (apiUrl) {
+        try {
+          await callApi('addOrder', order);
+          toast('✅ 已落單並同步到 Firebase');
+        } catch (e) {
+          toast('⚠️ 本地已儲存，但同步失敗：' + e.message);
+        }
+      } else {
+        toast('✅ 已落單（本地模式）');
+      }
+
+      // 記住呢次飲品習慣
+      saveDrinkPrefFromForm();
+      // 同步到 Sheet（方便其他手機）
+      if (apiUrl) {
+        const pref = drinkPrefs[initial];
+        if (pref) {
+          callApi('setSetting', { key: 'drinkpref_' + initial, value: JSON.stringify(pref) }).catch(() => {});
+        }
+      }
+
+      // reset 飯餐；飲品跟返該人習慣（方便連續點第二日）
+      document.querySelectorAll('.meal-item').forEach(el => el.classList.remove('selected'));
+      document.querySelectorAll('input[name="meal"]').forEach(r => r.checked = false);
+      selectedMeal = null;
+      document.getElementById('orderNote').value = '';
+      const packReset = document.getElementById('orderPack');
+      if (packReset) packReset.value = '1';
+      applyDrinkPrefForInitial();
+      calcPrice();
+      } finally {
+        _submitting = false;
+        showSubmitOverlay(false);
+        const btn = document.getElementById('submitBtn');
+        if (btn) {
+          // 成功後短時間保持 disabled，進一步防連撳
+          btn.disabled = true;
+          btn.textContent = '✅ 已提交';
+          setTimeout(() => {
+            if (!_submitting) {
+              btn.disabled = false;
+              btn.textContent = '✅ 確認落單';
+            }
+          }, 2000);
+        }
+      }
+    }
+
+    // ===================== 訂單列表 =====================
+    let _loadOrdersSeq = 0;
+    let _loadOverviewSeq = 0;
+    let _loadDebtsSeq = 0;
+
+    function loadingHtml(msg) {
+      return '<div class="panel-loading"><div class="spinner"></div><strong>' +
+        (msg || '載入中…') + '</strong><span style="font-size:.85rem">請稍候，資料更新中</span></div>';
+    }
+
+    async function loadOrders() {
+      const date = document.getElementById('filterDate').value;
+      const tbody = document.getElementById('ordersBody');
+      const stats = document.getElementById('orderStats');
+      const seq = ++_loadOrdersSeq;
+
+      // 即時清空舊資料 + 顯示 loading，避免同事以為仍係舊日子
+      if (stats) {
+        stats.className = 'status-bar loading-hint';
+        let dateLabel = date || '';
+        try { if (date) dateLabel = formatDateLabel(new Date(date + 'T12:00:00')); } catch (e) {}
+        stats.innerHTML = '<div class="status-item">⏳ 正在載入 ' + (dateLabel || '訂單') + '…</div>';
+      }
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="6">' + loadingHtml('載入訂單中') + '</td></tr>';
+      }
+      const filterSel = document.getElementById('filterDate');
+      if (filterSel) filterSel.disabled = true;
+
+      let orders = [];
+      if (apiUrl) {
+        try {
+          orders = await callApi('getOrders', { date }) || [];
+          if (seq !== _loadOrdersSeq) return; // 已轉咗其他日子，丟棄過期結果
+          // Sheet 為準：用 Sheet 資料覆蓋本地同日快取（唔合併，避免重複）
+          localOrders = localOrders.filter(o => o.date !== date).concat(orders.map(normalizeOrder));
+          localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
+        } catch (e) {
+          if (seq !== _loadOrdersSeq) return;
+          orders = localOrders.filter(o => o.date === date);
+          toast('無法連線 Firebase，顯示本機快取');
+        }
+      } else {
+        orders = localOrders.filter(o => o.date === date);
+      }
+      if (seq !== _loadOrdersSeq) return;
+
+      if (filterSel) filterSel.disabled = false;
+      if (stats) stats.className = 'status-bar';
+      if (!orders.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999">此日暫無訂單</td></tr>';
+        document.getElementById('orderStats').innerHTML = '';
+        return;
+      }
+
+      const dayCount = orders.length;
+      const bulkDisc = getBulkDiscount(dayCount);
+      const bulkLab = getBulkLabel(dayCount);
+      const totalAmt = orders.reduce((s,o) => s + (Number(o.total) || 0), 0);
+      const effectiveAmt = orders.reduce((s,o) => s + getEffectiveTotal(o, dayCount), 0);
+      const unpaid = orders.filter(o => !o.paid).length;
+      document.getElementById('orderStats').innerHTML = `
+        <div class="status-item">共 ${dayCount} 份</div>
+        <div class="status-item">${bulkDisc ? '應付 $' + effectiveAmt + '（' + bulkLab + '）' : '合計 $' + totalAmt}</div>
+        <div class="status-item">${unpaid ? unpaid + ' 人未付' : '全部已付 ✅'}</div>
+      `;
+
+      tbody.innerHTML = orders.map(o => {
+        const eff = getEffectiveTotal(o, dayCount);
+        const priceLabel = bulkDisc && eff !== Number(o.total)
+          ? `$${eff}<br><small style="color:#999;text-decoration:line-through">$${o.total}</small>`
+          : `$${o.total}`;
+        const noteShow = stripPackPrefix(o.note);
+        const packShow = (o.pack && o.pack > 1) ? ` <small style="color:#6366f1">📦包裝${o.pack}</small>` : '';
+        const noteHtml = noteShow
+          ? `<br><small style="color:#b45309">📝 ${noteShow.replace(/</g,'&lt;')}</small>`
+          : '';
+        return `
+        <tr>
+          <td><strong>${o.initial}</strong>${o.name ? '<br><small>'+o.name+'</small>' : ''}</td>
+          <td>${o.mealCode}. ${o.mealName}${packShow}${noteHtml}</td>
+          <td>${o.drink || '—'}</td>
+          <td>${priceLabel}</td>
+          <td>
+            <span class="badge ${o.paid ? 'badge-paid' : 'badge-unpaid'}">${o.paid ? '已付' : '未付'}</span>
+          </td>
+          <td>
+            ${!o.paid ? `<button class="btn btn-success" style="padding:4px 10px;font-size:.8rem" onclick="markPaid('${o.id}')">標已付</button>` : ''}
+            <button class="btn btn-danger" style="padding:4px 10px;font-size:.8rem" onclick="deleteOrder('${o.id}')">刪</button>
+          </td>
+        </tr>
+      `;
+      }).join('');
+      if (filterSel) filterSel.disabled = false;
+    }
+
+    function normalizeOrder(o) {
+      return {
+        id: String(o.id || ''),
+        timestamp: o.timestamp,
+        initial: o.initial,
+        name: o.name || '',
+        date: String(o.date || ''),
+        mealCode: o.mealCode,
+        mealName: o.mealName,
+        mealPrice: Number(o.mealPrice) || 0,
+        takeawayFee: o.takeawayFee != null ? Number(o.takeawayFee) : TAKEAWAY_FEE,
+        drink: o.drink || '',
+        drinkPrice: Number(o.drinkPrice) || 0,
+        total: Number(o.total) || 0,
+        paid: o.paid === true || o.paid === 'TRUE' || o.paid === 'true',
+        note: o.note || '',
+        pack: parsePackNumber(o)
+      };
+    }
+
+    function parsePackNumber(o) {
+      if (!o) return 1;
+      if (o.pack != null && o.pack !== '') {
+        const n = parseInt(o.pack, 10);
+        if (n >= 1 && n <= 5) return n;
+      }
+      const m = String(o.note || '').match(/^【包裝([1-5])】/);
+      return m ? parseInt(m[1], 10) : 1;
+    }
+
+    function stripPackPrefix(note) {
+      return String(note || '').replace(/^【包裝[1-5]】/, '').trim();
+    }
+
+
+    /** 要求輸入 4 位 PIN；正確回傳 true */
+    function requireAdminPin(reason) {
+      const msg = (reason || '需要管理員 PIN') + '\n請輸入 4 位數字：';
+      const input = prompt(msg, '');
+      if (input === null) return false;
+      if (String(input).trim() === ADMIN_PIN) return true;
+      toast('❌ PIN 錯誤');
+      return false;
+    }
+
+    /** 訂單日子是否「今日或未來」（可自由刪／取消） */
+    function isTodayOrFutureOrder(order) {
+      if (!order) return false;
+      const d = normalizeDate(order.date) || order.date || '';
+      if (!d) return false;
+      const today = toDateKey(new Date());
+      return d >= today;
+    }
+
+    function findOrderById(id) {
+      id = String(id);
+      return (_debtAllOrders || []).find(o => String(o.id) === id)
+        || (localOrders || []).find(o => String(o.id) === id)
+        || null;
+    }
+
+    async function markPaid(id) {
+      if (!requireAdminPin('標記已付需要 PIN')) return;
+      if (apiUrl) {
+        try { await callApi('markPaid', { id }); } catch(e) { toast(e.message); }
+      }
+      localOrders = localOrders.map(o => o.id === id ? {...o, paid:true} : o);
+      if (_debtAllOrders && _debtAllOrders.length) {
+        _debtAllOrders = _debtAllOrders.map(o => String(o.id) === String(id) ? {...o, paid:true} : o);
+      }
+      localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
+      loadOrders();
+      loadDebts();
+      toast('已標記付款');
+    }
+
+    /** 一鍵將某同事所有未付訂單標為已付（方便 PayMe 一次收齊） */
+    async function markAllPaidByInitial(initial) {
+      initial = String(initial || '').toUpperCase();
+      if (!initial) return;
+      const unpaid = localOrders.filter(o => !o.paid && String(o.initial).toUpperCase() === initial);
+      // 若本機無，嘗試從 Sheet 再拉
+      let list = unpaid;
+      if (apiUrl) {
+        try {
+          const all = (await callApi('getAllUnpaid') || []).map(normalizeOrder);
+          list = all.filter(o => String(o.initial).toUpperCase() === initial);
+        } catch (e) {
+          console.warn(e);
+        }
+      }
+      if (!list.length) {
+        toast(initial + ' 沒有未付訂單');
+        loadDebts();
+        return;
+      }
+      if (!requireAdminPin('一鍵標已付需要 PIN')) return;
+      const dayCountsAll = dayCountMapFromOrders(_debtAllOrders.length ? _debtAllOrders : localOrders);
+      const total = list.reduce((s, o) => s + effectiveOrderTotal(o, dayCountsAll), 0);
+      if (!confirm(`確認 ${initial} 已付清全部 ${list.length} 單（合共 $${total}，已計滿5減2）？\n（適合收齊 PayMe 後一次標記）`)) return;
+
+      // 優先用 API 一次處理
+      if (apiUrl) {
+        try {
+          await callApi('markAllPaid', { initial: initial });
+        } catch (e) {
+          // fallback：逐單 markPaid
+          console.warn('markAllPaid failed, fallback', e);
+          for (const o of list) {
+            try { await callApi('markPaid', { id: o.id }); } catch (e2) {}
+          }
+        }
+      }
+      const ids = new Set(list.map(o => String(o.id)));
+      localOrders = localOrders.map(o => ids.has(String(o.id)) || (String(o.initial).toUpperCase() === initial && !o.paid)
+        ? {...o, paid: true} : o);
+      // 確保該人所有未付都標已付
+      localOrders = localOrders.map(o =>
+        String(o.initial).toUpperCase() === initial ? {...o, paid: true} : o
+      );
+      localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
+      loadOrders();
+      loadDebts();
+      toast(`✅ ${initial} 共 ${list.length} 單已標為已付（$${total}）`);
+    }
+
+    async function deleteOrder(id) {
+      const order = findOrderById(id);
+      if (!order) {
+        toast('找不到訂單');
+        return;
+      }
+      const locked = isOrderDateLocked(order.date);
+      const canFree = isTodayOrFutureOrder(order) && !locked;
+      if (!canFree) {
+        const reason = locked
+          ? '此日已鎖定，刪除需要 PIN'
+          : '刪除「過去日子」的訂單需要 PIN（避免誤刪）';
+        if (!requireAdminPin(reason)) return;
+      }
+      const dlabel = order.date || '';
+      const tip = canFree
+        ? ('確定取消／刪除此訂單？\n' + dlabel + ' · ' + (order.initial || '') + ' · ' + (order.mealName || ''))
+        : ('【PIN 已通過】確定刪除過去訂單？\n' + dlabel + ' · ' + (order.initial || '') + ' · ' + (order.mealName || ''));
+      if (!confirm(tip)) return;
+      if (apiUrl) {
+        try { await callApi('deleteOrder', { id, forceAdmin: !canFree }); } catch(e) { toast(e.message); return; }
+      }
+      localOrders = localOrders.filter(o => String(o.id) !== String(id));
+      if (_debtAllOrders && _debtAllOrders.length) {
+        _debtAllOrders = _debtAllOrders.filter(o => String(o.id) !== String(id));
+      }
+      localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
+      loadOrders();
+      loadDebts();
+      toast(canFree ? '已取消／刪除' : '已刪除（過去訂單）');
+    }
+
+    // ===================== 欠款 =====================
+    let _debtAllOrders = []; // 最新全量（含已付，方便篩人）
+
+    async function loadDebts() {
+      const seq = ++_loadDebtsSeq;
+      const box = document.getElementById('debtList');
+      const detail = document.getElementById('debtPersonDetail');
+      if (box) box.innerHTML = loadingHtml('載入欠款資料中');
+      if (detail) detail.innerHTML = '<p style="color:#999;font-size:.9rem">載入中…</p>';
+
+      let unpaid = [];
+      let all = [];
+      if (apiUrl) {
+        try {
+          unpaid = (await callApi('getAllUnpaid') || []).map(normalizeOrder);
+          if (seq !== _loadDebtsSeq) return;
+          try {
+            all = (await callApi('getAllOrders') || []).map(normalizeOrder);
+          } catch (e2) {
+            all = unpaid.slice();
+          }
+          // 合併更新本機未付狀態
+          const paidIds = new Set();
+          // 用 all 覆蓋 local 同日資料較完整
+          if (all.length) {
+            const byId = {};
+            localOrders.forEach(o => { byId[o.id] = o; });
+            all.forEach(o => { byId[o.id] = o; });
+            localOrders = Object.values(byId);
+            localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
+          }
+        } catch (e) {
+          unpaid = localOrders.filter(o => !o.paid);
+          all = localOrders.slice();
+          toast('無法連線 Firebase，顯示本機欠款');
+        }
+      } else {
+        unpaid = localOrders.filter(o => !o.paid);
+        all = localOrders.slice();
+      }
+      if (seq !== _loadDebtsSeq) return;
+      _debtAllOrders = all.length ? all : localOrders.slice();
+
+      // box 已在函數開頭宣告
+      const map = {};
+      // 全日份數（含已付）先計好，先至有滿5減2
+      const dayCounts = dayCountMapFromOrders(_debtAllOrders.length ? _debtAllOrders : localOrders);
+      unpaid.forEach(o => {
+        const k = String(o.initial || '').toUpperCase();
+        if (!k) return;
+        if (!map[k]) map[k] = { name: o.name || '', total: 0, count: 0, details: [] };
+        const eff = effectiveOrderTotal(o, dayCounts);
+        map[k].total += eff;
+        map[k].count += 1;
+        const d = normalizeDate(o.date) || o.date || '';
+        const bd = getBulkDiscount(dayCounts[d] || 0); const bulkTag = bd ? (' (−' + bd + ')') : '';
+        map[k].details.push((o.date || '') + ' ' + (o.mealCode || '') + '.' + (o.mealName || '') + ' $' + eff + bulkTag);
+      });
+      const keys = Object.keys(map).sort();
+      if (!keys.length) {
+        box.innerHTML = '<p style="color:var(--success);font-weight:600">🎉 目前無人欠款</p>';
+      } else {
+        box.innerHTML = `
+          <div class="table-wrap"><table>
+          <thead><tr><th>Initial</th><th>次數</th><th>欠款</th><th>詳情</th><th>操作</th></tr></thead>
+          <tbody>
+            ${keys.map(k => `
+              <tr>
+                <td><strong>${k}</strong>${map[k].name ? '<br><small>'+map[k].name+'</small>' : ''}</td>
+                <td>${map[k].count}</td>
+                <td style="color:var(--danger);font-weight:700">$${map[k].total}</td>
+                <td style="font-size:.8rem;color:#666">${map[k].details.join('<br>')}</td>
+                <td style="white-space:nowrap">
+                  <button class="btn btn-secondary" style="padding:6px 10px;font-size:.75rem;margin-bottom:4px"
+                    onclick="focusDebtPerson('${k}')">查詳情</button><br>
+                  <button class="btn btn-success" style="padding:6px 10px;font-size:.75rem"
+                    onclick="markAllPaidByInitial('${k}')">一鍵已付 $${map[k].total}</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody></table></div>
+          <p style="margin-top:10px;font-weight:600">總欠款：$${keys.reduce((s,k)=>s+map[k].total,0)}</p>
+          <p style="font-size:.8rem;color:var(--muted);margin-top:6px">資料來源：${apiUrl ? 'Firebase 雲端資料庫' : '本機快取'}</p>
+        `;
+      }
+
+      populateDebtFilters();
+      renderDebtPersonDetail();
+    }
+
+    function populateDebtFilters() {
+      const personSel = document.getElementById('debtPersonSelect');
+      const monthSel = document.getElementById('debtMonthSelect');
+      if (!personSel || !monthSel) return;
+      const prevP = personSel.value;
+      const prevM = monthSel.value;
+
+      const initials = [...new Set(_debtAllOrders.map(o => String(o.initial || '').toUpperCase()).filter(Boolean))].sort();
+      personSel.innerHTML = '<option value="">— 請選擇 —</option>' +
+        initials.map(i => '<option value="'+i+'">'+i+'</option>').join('');
+      if (initials.includes(prevP)) personSel.value = prevP;
+
+      const months = [...new Set(_debtAllOrders.map(o => {
+        const d = normalizeDate(o.date) || o.date || '';
+        return d.length >= 7 ? d.slice(0, 7) : '';
+      }).filter(Boolean))].sort().reverse();
+      monthSel.innerHTML = '<option value="">— 唔限月份 —</option>' +
+        months.map(m => {
+          const [y, mo] = m.split('-');
+          return '<option value="'+m+'">'+y+'年'+parseInt(mo,10)+'月</option>';
+        }).join('');
+      if (months.includes(prevM)) monthSel.value = prevM;
+
+      refreshDebtDateOptions();
+    }
+
+    function focusDebtPerson(initial) {
+      const sel = document.getElementById('debtPersonSelect');
+      if (sel) {
+        sel.value = String(initial).toUpperCase();
+        onDebtFilterChange();
+        document.getElementById('debtPersonDetail')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    function onDebtFilterChange() {
+      document.getElementById('debtMonthSelect').value = '';
+      refreshDebtDateOptions();
+      renderDebtPersonDetail();
+    }
+
+    function onDebtMonthChange() {
+      refreshDebtDateOptions();
+      // 自動選該月所有有單日子
+      const month = document.getElementById('debtMonthSelect').value;
+      const dateSel = document.getElementById('debtDateSelect');
+      if (!dateSel) return;
+      [...dateSel.options].forEach(opt => {
+        opt.selected = month ? opt.value.startsWith(month) : false;
+      });
+      renderDebtPersonDetail();
+    }
+
+    function refreshDebtDateOptions() {
+      const person = (document.getElementById('debtPersonSelect').value || '').toUpperCase();
+      const month = document.getElementById('debtMonthSelect').value || '';
+      const dateSel = document.getElementById('debtDateSelect');
+      if (!dateSel) return;
+      const prev = new Set([...dateSel.selectedOptions].map(o => o.value));
+
+      let list = _debtAllOrders.slice();
+      if (person) list = list.filter(o => String(o.initial).toUpperCase() === person);
+      if (month) list = list.filter(o => (normalizeDate(o.date) || o.date || '').startsWith(month));
+
+      const dates = [...new Set(list.map(o => normalizeDate(o.date) || o.date).filter(Boolean))].sort();
+      const today = toDateKey(new Date());
+      dateSel.innerHTML = dates.map(d => {
+        let label = d;
+        try { label = formatDateLabel(new Date(d + 'T12:00:00')); } catch (e) {}
+        const tag = d < today ? '已食' : (d === today ? '今日' : '預訂');
+        return '<option value="'+d+'"'+(prev.has(d)?' selected':'')+'>'+label+'（'+tag+'）</option>';
+      }).join('');
+    }
+
+    function getSelectedDebtDates() {
+      const dateSel = document.getElementById('debtDateSelect');
+      if (!dateSel) return [];
+      return [...dateSel.selectedOptions].map(o => o.value);
+    }
+
+    function debtSelectPastOnly() {
+      const today = toDateKey(new Date());
+      const dateSel = document.getElementById('debtDateSelect');
+      if (!dateSel) return;
+      [...dateSel.options].forEach(opt => { opt.selected = opt.value <= today; });
+      renderDebtPersonDetail();
+    }
+
+    function debtSelectFutureOnly() {
+      const today = toDateKey(new Date());
+      const dateSel = document.getElementById('debtDateSelect');
+      if (!dateSel) return;
+      [...dateSel.options].forEach(opt => { opt.selected = opt.value > today; });
+      renderDebtPersonDetail();
+    }
+
+    function debtSelectAllDates() {
+      const dateSel = document.getElementById('debtDateSelect');
+      if (!dateSel) return;
+      [...dateSel.options].forEach(opt => { opt.selected = true; });
+      renderDebtPersonDetail();
+    }
+
+    function debtClearDates() {
+      const dateSel = document.getElementById('debtDateSelect');
+      if (!dateSel) return;
+      [...dateSel.options].forEach(opt => { opt.selected = false; });
+      renderDebtPersonDetail();
+    }
+
+    function renderDebtPersonDetail() {
+      const box = document.getElementById('debtPersonDetail');
+      if (!box) return;
+      const person = (document.getElementById('debtPersonSelect').value || '').toUpperCase();
+      if (!person) {
+        box.innerHTML = '<p style="color:#999;font-size:.9rem">請先選擇同事 Initial</p>';
+        return;
+      }
+
+      let orders = _debtAllOrders.filter(o => String(o.initial).toUpperCase() === person);
+      const selectedDates = getSelectedDebtDates();
+      if (selectedDates.length) {
+        const set = new Set(selectedDates);
+        orders = orders.filter(o => set.has(normalizeDate(o.date) || o.date));
+      }
+      const month = document.getElementById('debtMonthSelect').value || '';
+      if (month && !selectedDates.length) {
+        orders = orders.filter(o => (normalizeDate(o.date) || o.date || '').startsWith(month));
+      }
+
+      orders.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+      const today = toDateKey(new Date());
+      const dayCounts = dayCountMapFromOrders(_debtAllOrders.length ? _debtAllOrders : localOrders);
+      const unpaid = orders.filter(o => !o.paid);
+      const paid = orders.filter(o => o.paid);
+      const unpaidTotal = unpaid.reduce((s, o) => s + effectiveOrderTotal(o, dayCounts), 0);
+      const pastUnpaid = unpaid.filter(o => (normalizeDate(o.date) || o.date) <= today);
+      const futureUnpaid = unpaid.filter(o => (normalizeDate(o.date) || o.date) > today);
+      const pastTotal = pastUnpaid.reduce((s, o) => s + effectiveOrderTotal(o, dayCounts), 0);
+      const futureTotal = futureUnpaid.reduce((s, o) => s + effectiveOrderTotal(o, dayCounts), 0);
+
+      if (!orders.length) {
+        box.innerHTML = '<p style="color:#999">此篩選條件下沒有訂單</p>';
+        return;
+      }
+
+      const rows = orders.map(o => {
+        const d = normalizeDate(o.date) || o.date;
+        const tag = d < today ? '<span class="badge badge-paid" style="background:#e0e7ff;color:#3730a3">已食</span>'
+          : (d === today ? '<span class="badge badge-paid">今日</span>'
+          : '<span class="badge badge-unpaid" style="background:#fef3c7;color:#92400e">預訂</span>');
+        let dateLabel = d;
+        try { dateLabel = formatDateLabel(new Date(d + 'T12:00:00')); } catch (e) {}
+        const eff = effectiveOrderTotal(o, dayCounts);
+        const dKey = normalizeDate(o.date) || o.date || '';
+        const hasBulk = (dayCounts[dKey] || 0) >= BULK_THRESHOLD;
+        const priceCell = hasBulk && !o.paid
+          ? `$${eff}<br><small style="color:#999;text-decoration:line-through">$${o.total}</small>`
+          : `$${eff}`;
+        const noteBit = o.note ? `<br><small style="color:#b45309">📝 ${String(o.note).replace(/</g,'&lt;')}</small>` : '';
+        return `<tr>
+          <td>${dateLabel}<br>${tag}</td>
+          <td>${o.mealCode}. ${o.mealName}${noteBit}</td>
+          <td>${o.drink || '—'}</td>
+          <td>${priceCell}</td>
+          <td><span class="badge ${o.paid ? 'badge-paid' : 'badge-unpaid'}">${o.paid ? '已付' : '未付'}</span></td>
+          <td>
+            ${!o.paid ? `<button class="btn btn-success" style="padding:4px 8px;font-size:.75rem" onclick="markPaid('${o.id}')">標已付</button>` : ''}
+            <button class="btn btn-danger" style="padding:4px 8px;font-size:.75rem" onclick="deleteOrder('${o.id}')">刪/取消</button>
+          </td>
+        </tr>`;
+      }).join('');
+
+      box.innerHTML = `
+        <div class="stat-big" style="margin-bottom:12px">
+          <div class="stat-card"><div class="num">$${unpaidTotal}</div><div class="lbl">${person} 篩選內未付</div></div>
+          <div class="stat-card alt"><div class="num">$${pastTotal}</div><div class="lbl">已食／今日未付</div></div>
+          <div class="stat-card warn"><div class="num">$${futureTotal}</div><div class="lbl">預訂單未付</div></div>
+        </div>
+        <p style="font-size:.85rem;margin-bottom:8px">
+          未付 <strong>${unpaid.length}</strong> 單　·　已付 ${paid.length} 單　·　共 ${orders.length} 單
+          ${selectedDates.length ? '（已選 '+selectedDates.length+' 個日子）' : (month ? '（月份 '+month+'）' : '（全部日子）')}
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          ${unpaid.length ? `<button class="btn btn-success" onclick="markPaidForDebtFilter('${person}')">將篩選內 ${unpaid.length} 單標已付（$${unpaidTotal}）</button>` : ''}
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>日子</th><th>飯餐</th><th>飲品</th><th>金額</th><th>狀態</th><th>操作</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+      `;
+    }
+
+    async function markPaidForDebtFilter(person) {
+      if (!requireAdminPin('篩選標已付需要 PIN')) return;
+      person = String(person || '').toUpperCase();
+      let orders = _debtAllOrders.filter(o => !o.paid && String(o.initial).toUpperCase() === person);
+      const selectedDates = getSelectedDebtDates();
+      if (selectedDates.length) {
+        const set = new Set(selectedDates);
+        orders = orders.filter(o => set.has(normalizeDate(o.date) || o.date));
+      } else {
+        const month = document.getElementById('debtMonthSelect').value || '';
+        if (month) orders = orders.filter(o => (normalizeDate(o.date) || o.date || '').startsWith(month));
+      }
+      if (!orders.length) { toast('沒有未付訂單'); return; }
+      const dayCounts = dayCountMapFromOrders(_debtAllOrders.length ? _debtAllOrders : localOrders);
+      const total = orders.reduce((s, o) => s + effectiveOrderTotal(o, dayCounts), 0);
+      if (!confirm(`確認將 ${person} 篩選內 ${orders.length} 單標為已付（合共 $${total}，已計滿5減2）？`)) return;
+
+      if (apiUrl) {
+        for (const o of orders) {
+          try { await callApi('markPaid', { id: o.id }); } catch (e) { console.warn(e); }
+        }
+      }
+      const ids = new Set(orders.map(o => String(o.id)));
+      localOrders = localOrders.map(o => ids.has(String(o.id)) ? {...o, paid: true} : o);
+      _debtAllOrders = _debtAllOrders.map(o => ids.has(String(o.id)) ? {...o, paid: true} : o);
+      localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
+      loadOrders();
+      loadDebts();
+      toast(`✅ ${person} 已標 ${orders.length} 單已付（$${total}）`);
+    }
+
+
+    // ===================== 總覽 =====================
+    let pickupByDateMap = JSON.parse(localStorage.getItem('lunch_pickup_by_date') || '{}'); // 舊資料兼容
+    // 按星期：0=日 … 6=六
+    let pickupByWeekday = JSON.parse(localStorage.getItem('lunch_pickup_by_weekday') || '{}');
+    // 訂單鎖定：YYYY-MM-DD，該日及之前不可再落單／改單
+    let orderLockUntil = localStorage.getItem('lunch_order_lock_until') || '';
+
+    async function loadOverview() {
+      const seq = ++_loadOverviewSeq;
+      const stats = document.getElementById('overviewStats');
+      let cardHost = document.getElementById('overviewCards');
+      const body = document.getElementById('overviewBody');
+      if (stats) {
+        stats.className = 'status-bar loading-hint';
+        stats.innerHTML = '<div class="status-item">⏳ 正在載入總覽…</div>';
+      }
+      if (!cardHost && body) {
+        const table = body.closest('table');
+        cardHost = document.createElement('div');
+        cardHost.id = 'overviewCards';
+        cardHost.className = 'overview-grid';
+        if (table && table.parentNode) {
+          table.style.display = 'none';
+          table.parentNode.insertBefore(cardHost, table);
+        }
+      }
+      if (cardHost) cardHost.innerHTML = loadingHtml('載入總覽中');
+
+      let orders = [];
+      if (apiUrl) {
+        try {
+          orders = (await callApi('getAllOrders') || []).map(normalizeOrder);
+          if (seq !== _loadOverviewSeq) return;
+          localOrders = orders.slice();
+          localStorage.setItem('lunch_orders', JSON.stringify(localOrders));
+        } catch (e) {
+          if (seq !== _loadOverviewSeq) return;
+          orders = localOrders.slice();
+          toast('總覽改用本機資料：' + e.message);
+        }
+      } else {
+        orders = localOrders.slice();
+      }
+      if (seq !== _loadOverviewSeq) return;
+      if (stats) stats.className = 'status-bar';
+
+      const byDate = {};
+      orders.forEach(o => {
+        const d = normalizeDate(o.date) || o.date;
+        if (!d) return;
+        if (!byDate[d]) byDate[d] = [];
+        byDate[d].push(o);
+      });
+      let dates = Object.keys(byDate).sort();
+      const today = toDateKey(new Date());
+
+      // 月份下拉
+      const monthSel = document.getElementById('overviewMonth');
+      if (monthSel) {
+        const months = [...new Set(dates.map(d => d.slice(0, 7)).filter(Boolean))].sort().reverse();
+        const prevM = monthSel.value;
+        monthSel.innerHTML = '<option value="">全部月份</option>' +
+          months.map(m => {
+            const [y, mo] = m.split('-');
+            return '<option value="' + m + '">' + y + '年' + parseInt(mo, 10) + '月</option>';
+          }).join('');
+        if (months.includes(prevM)) monthSel.value = prevM;
+        else if (!prevM && months.length) {
+          // 預設當月（有資料就選）
+          const thisM = today.slice(0, 7);
+          monthSel.value = months.includes(thisM) ? thisM : months[0];
+        }
+        const mf = monthSel.value;
+        if (mf) dates = dates.filter(d => d.startsWith(mf));
+      }
+
+      // body / stats / cardHost 已在函數開頭準備
+      if (!cardHost) {
+        const table = body && body.closest('table');
+        cardHost = document.createElement('div');
+        cardHost.id = 'overviewCards';
+        cardHost.className = 'overview-grid';
+        if (table && table.parentNode) {
+          table.style.display = 'none';
+          table.parentNode.insertBefore(cardHost, table);
+        } else if (body) {
+          body.innerHTML = '';
+        }
+      }
+
+      if (!dates.length) {
+        cardHost.innerHTML = '<p style="color:#999;grid-column:1/-1;text-align:center">暫無訂單</p>';
+        if (stats) stats.innerHTML = '';
+        return;
+      }
+
+      let grandTotal = 0, grandCount = 0, unpaidCount = 0;
+      dates.forEach(d => {
+        const list = byDate[d];
+        grandCount += list.length;
+        const sum = list.reduce((s, o) => s + getEffectiveTotal(o, list.length), 0);
+        grandTotal += sum;
+        unpaidCount += list.filter(o => !o.paid).length;
+      });
+
+      if (stats) {
+        stats.innerHTML = `
+          <div class="stat-big">
+            <div class="stat-card"><div class="num">${dates.length}</div><div class="lbl">已訂日子</div></div>
+            <div class="stat-card alt"><div class="num">${grandCount}</div><div class="lbl">總份數</div></div>
+            <div class="stat-card warn"><div class="num">$${grandTotal}</div><div class="lbl">合計${unpaidCount ? ' · '+unpaidCount+'未付' : ''}</div></div>
+          </div>`;
+      }
+
+      const maxMeal = Math.max(1, ...dates.map(d => {
+        const map = {};
+        byDate[d].forEach(o => { map[o.mealCode] = (map[o.mealCode]||0)+1; });
+        return Math.max(1, ...Object.values(map));
+      }));
+
+      cardHost.innerHTML = dates.map(d => {
+        const list = byDate[d];
+        const n = list.length;
+        const hasBulk = n >= BULK_THRESHOLD;
+        const sum = list.reduce((s, o) => s + getEffectiveTotal(o, n), 0);
+        let dateLabel = d;
+        try { dateLabel = formatDateLabel(new Date(d + 'T12:00:00')); } catch (e) {}
+        const isToday = d === today;
+        const mealMap = {};
+        list.forEach(o => {
+          const k = (o.mealCode || '') + '. ' + (o.mealName || '');
+          mealMap[k] = (mealMap[k] || 0) + 1;
+        });
+        const bars = Object.entries(mealMap).sort((a,b)=>b[1]-a[1]).map(([k,v]) => {
+          const pct = Math.round(v / maxMeal * 100);
+          return `<div class="meal-bar-row"><span class="meal-bar-label" title="${k}">${v}× ${k}</span>
+            <div class="meal-bar-track"><div class="meal-bar-fill" style="width:${pct}%"></div></div></div>`;
+        }).join('');
+        const chips = list.map(o =>
+          `<span class="chip ${o.paid ? 'paid' : 'unpaid'}" title="${o.mealName||''}">${o.initial}${o.paid?'':' ·未付'}</span>`
+        ).join('');
+        const pickup = getPickupForDate(d);
+        return `<div class="day-card ${isToday ? 'today' : ''}">
+          <div class="day-title">
+            <span>${isToday ? '📍 ' : ''}${dateLabel}</span>
+            <span style="font-size:.85rem;color:var(--primary)">${n} 份${getBulkDiscount(n) ? ' ·' + getBulkLabel(n) : ''}</span>
+          </div>
+          <div class="day-meta">合計 <strong>$${sum}</strong> · 拎飯：<strong>${pickup || '未定'}</strong></div>
+          <div class="people-chips">${chips}</div>
+          <div class="meal-bars">${bars}</div>
+          <div class="pickup-row">
+            <input type="text" placeholder="拎飯人" value="${pickup.replace(/"/g, '&quot;')}" data-date="${d}" class="pickup-input" />
+            <button class="btn btn-primary" style="padding:6px 10px;font-size:.8rem" onclick="savePickupFromCard('${d}', this)">儲存</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    function savePickupFromCard(d, btn) {
+      const input = btn.parentNode.querySelector('.pickup-input');
+      const person = (input && input.value || '').trim();
+      const wd = getWeekdayKey(d);
+      pickupByWeekday[String(wd)] = person;
+      localStorage.setItem('lunch_pickup_by_weekday', JSON.stringify(pickupByWeekday));
+      refreshPickupDisplay();
+      if (apiUrl) callApi('setSetting', { key: 'pickup_by_weekday', value: JSON.stringify(pickupByWeekday) }).catch(()=>{});
+      toast('已更新 ' + WEEKDAY_LABELS[wd] + ' 拎飯人（每週循環）');
+      loadOverview();
+    }
+
+    async function savePickupByDate() {
+      const d = document.getElementById('pickupDateSelect').value;
+      const person = document.getElementById('pickupByDate').value.trim();
+      if (!d) { toast('請選擇日子'); return; }
+      pickupByDateMap[d] = person;
+      localStorage.setItem('lunch_pickup_by_date', JSON.stringify(pickupByDateMap));
+      // 同步到 Sheet（key = pickup_YYYY-MM-DD）
+      if (apiUrl) {
+        try {
+          await callApi('setSetting', { key: 'pickup_' + d, value: person });
+        } catch (e) { console.warn(e); }
+      }
+      // 若係今日，更新頂部
+      const today = toDateKey(new Date());
+      if (d === today) {
+        pickupPerson = person;
+        localStorage.setItem('lunch_pickup', person);
+        document.getElementById('pickupPerson').textContent = person || '未設定';
+        refreshPickupDisplay();
+      }
+      toast('已儲存 ' + d + ' 拎飯人：' + (person || '（清空）'));
+      loadOverview();
+    }
+
+        // ===================== 匯出 WhatsApp =====================
+    function getBulkDiscount(dayCount) {
+      const n = Number(dayCount) || 0;
+      for (const tier of BULK_TIERS) {
+        if (n >= tier.min) return tier.discount;
+      }
+      return 0;
+    }
+
+    function getBulkLabel(dayCount) {
+      const d = getBulkDiscount(dayCount);
+      if (!d) return '';
+      const min = (BULK_TIERS.find(t => t.discount === d) || {}).min || BULK_THRESHOLD;
+      return `已達滿${min}份，每飯 −$${d}`;
+    }
+
+    function getEffectiveTotal(order, dayCount) {
+      // dayCount = 當日總份數；階梯優惠 5/10/15 → −2/−4/−6
+      let t = (order.mealPrice || 0) + (order.takeawayFee != null ? order.takeawayFee : TAKEAWAY_FEE) + (order.drinkPrice || 0);
+      t -= getBulkDiscount(dayCount);
+      return Math.max(0, t);
+    }
+
+    /** 以全日訂單份數計算優惠後金額（欠款合計用） */
+    function dayCountMapFromOrders(allOrders) {
+      const map = {};
+      (allOrders || []).forEach(o => {
+        const d = normalizeDate(o.date) || o.date || '';
+        if (!d) return;
+        map[d] = (map[d] || 0) + 1;
+      });
+      return map;
+    }
+
+    function effectiveOrderTotal(order, dayCountMap) {
+      const d = normalizeDate(order.date) || order.date || '';
+      const n = (dayCountMap && dayCountMap[d]) || 1;
+      return getEffectiveTotal(order, n);
+    }
+
+
+    /** WhatsApp 用：正常冰/糖省略；其餘用半形括號 */
+    function formatDrinkForExport(raw) {
+      if (!raw) return '';
+      let s = String(raw).trim();
+      // 凍奶茶（少冰・少糖） 備註  或  凍奶茶（正常・正常）
+      const m = s.match(/^(.+?)(?:（([^）]*)）)?(?:\s+(.+))?$/);
+      if (!m) return s;
+      let name = (m[1] || '').trim();
+      const opts = (m[2] || '').trim();
+      const note = (m[3] || '').trim();
+      const parts = [];
+      if (opts) {
+        opts.split(/[・·‧/／,，\s]+/).filter(Boolean).forEach(p => {
+          p = p.trim();
+          if (!p) return;
+          // 正常、正常冰、正常糖、全糖（當正常）唔寫
+          if (p === '正常' || p === '正常冰' || p === '正常糖' || p === '全糖') return;
+          parts.push(p);
+        });
+      }
+      let out = name;
+      if (parts.length) out += '(' + parts.join('・') + ')';
+      if (note) out += ' ' + note;
+      return out;
+    }
+
+    function generateExport() {
+      const date = document.getElementById('exportDate').value;
+      let orders = localOrders.filter(o => o.date === date);
+      const d = new Date(date + 'T12:00:00');
+      let text = `【六記訂飯】${formatDateLabel(d)}\n`;
+      text += `────────────────\n`;
+
+      if (!orders.length) {
+        text += '（暫無訂單）\n';
+      } else {
+        const dayCount = orders.length;
+        const hasBulk = dayCount >= BULK_THRESHOLD;
+
+        // 包裝：若全部係包裝1 → 唔顯示包裝字眼；有 2+ 先分組
+        const packsUsed = [...new Set(orders.map(o => parsePackNumber(o)))].sort((a,b) => a-b);
+        const multiPack = packsUsed.some(p => p > 1) || packsUsed.length > 1;
+
+        function appendMealsAndDrinks(list, prefix) {
+          let block = prefix || '';
+          const mealCount = {};
+          list.forEach(o => {
+            let label = `${o.mealCode}. ${o.mealName}`;
+            let note = stripPackPrefix(o.note);
+            if (note.startsWith('選項:')) {
+              const opt = note.slice(3).trim();
+              if (o.mealName && o.mealName.indexOf(opt) >= 0) note = '';
+              else note = opt;
+            }
+            if (note) label += `（${note}）`;
+            mealCount[label] = (mealCount[label] || 0) + 1;
+          });
+          Object.entries(mealCount).forEach(([k, v]) => {
+            block += `${v} × ${k}\n`;
+          });
+          const drinkCount = {};
+          list.forEach(o => {
+            if (!o.drink) return;
+            const key = formatDrinkForExport(o.drink);
+            if (!key) return;
+            drinkCount[key] = (drinkCount[key] || 0) + 1;
+          });
+          const drinkKeys = Object.keys(drinkCount);
+          if (drinkKeys.length) {
+            block += `\n飲品：\n`;
+            drinkKeys.forEach(k => {
+              const n = drinkCount[k];
+              block += n > 1 ? `• ${k} ×${n}\n` : `• ${k}\n`;
+            });
+          }
+          return block;
+        }
+
+        if (!multiPack) {
+          text += appendMealsAndDrinks(orders, '');
+        } else {
+          packsUsed.forEach((p, idx) => {
+            const list = orders.filter(o => parsePackNumber(o) === p);
+            if (!list.length) return;
+            if (idx > 0) text += `\n`;
+            text += `【包裝${p}】\n`;
+            text += appendMealsAndDrinks(list, '');
+          });
+        }
+
+        text += `\n共 ${dayCount} 份`;
+        const bulkLab = getBulkLabel(dayCount);
+        if (bulkLab) {
+          text += `（${bulkLab}）\n`;
+        } else {
+          text += `\n`;
+        }
+      }
+
+      text += `────────────────\n`;
+      text += `備註：12:15-12:45 送到\n`;
+      text += `放可譽中學門口，直行5-10步轉右走廊上的長枱（放外賣專用，電聯未必有人即時聽）\n`;
+
+      document.getElementById('exportText').value = text;
+      updateExportDayTotal(date, orders);
+    }
+
+    function updateExportDayTotal(date, orders) {
+      const el = document.getElementById('exportDayTotal');
+      const meta = document.getElementById('exportDayTotalMeta');
+      if (!el) return;
+      orders = orders || localOrders.filter(o => o.date === date);
+      const n = orders.length;
+      if (!n) {
+        el.textContent = '$0';
+        if (meta) meta.textContent = '暫無訂單';
+        return;
+      }
+      const dayCount = n;
+      const sum = orders.reduce((s, o) => s + getEffectiveTotal(o, dayCount), 0);
+      const unpaidN = orders.filter(o => !o.paid).length;
+      const bulkLab = getBulkLabel(dayCount);
+      el.textContent = '$' + sum;
+      if (meta) {
+        meta.textContent = '共 ' + n + ' 份' + (bulkLab ? '（' + bulkLab + '）' : '') +
+          (unpaidN ? ' · ' + unpaidN + ' 單未付' : ' · 全部已付');
+      }
+    }
+
+
+
+    function isOrderDateLocked(dateStr) {
+      if (!orderLockUntil) return false;
+      const d = (normalizeDate(dateStr) || dateStr || '').substring(0, 10);
+      let lock = String(orderLockUntil).substring(0, 10);
+      if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(lock)) return false;
+      const today = toDateKey(new Date());
+      // 安全：不可鎖「未來」日子（避免誤鎖全部預訂單）
+      if (d > today) return false;
+      // lock 若異常大於今日，只當鎖到今日
+      if (lock > today) lock = today;
+      return d <= lock;
+    }
+
+    function updateOrderLockBanner() {
+      const banner = document.getElementById('orderLockBanner');
+      const status = document.getElementById('orderLockStatus');
+      const orderDateEl = document.getElementById('orderDate');
+      const orderDate = orderDateEl ? orderDateEl.value : toDateKey(new Date());
+      if (status) {
+        status.textContent = orderLockUntil
+          ? ('目前已鎖定：' + orderLockUntil + ' 及之前的訂單')
+          : '目前未鎖定';
+        status.style.color = orderLockUntil ? 'var(--danger)' : 'var(--muted)';
+      }
+      if (banner) {
+        if (orderLockUntil && isOrderDateLocked(orderDate)) {
+          banner.style.display = 'block';
+          banner.innerHTML = '🔒 已落單鎖定：<strong>' + orderDate + '</strong> 及更早日子不可再新增／修改訂單（鎖定至 ' + orderLockUntil + '）。如需改動請聯絡負責人解除鎖定。';
+        } else if (orderLockUntil) {
+          banner.style.display = 'block';
+          banner.style.background = '#fffbeb';
+          banner.style.borderColor = '#fcd34d';
+          banner.style.color = '#92400e';
+          banner.innerHTML = 'ℹ️ 系統已鎖定 ' + orderLockUntil + ' 及之前；你選的日子仍可落單。';
+        } else {
+          banner.style.display = 'none';
+          banner.innerHTML = '';
+        }
+      }
+      // disable submit if locked
+      const btn = document.getElementById('submitBtn');
+      if (btn && orderDateEl) {
+        if (isOrderDateLocked(orderDateEl.value)) {
+          btn.disabled = true;
+          btn.textContent = '🔒 此日已鎖定，不能落單';
+        } else if (!_submitting) {
+          btn.disabled = false;
+          btn.textContent = '✅ 確認落單';
+        }
+      }
+    }
+
+    async function lockOrdersUntilExportDate() {
+      if (!requireAdminPin('鎖定訂單需要 PIN')) return;
+      const today = toDateKey(new Date());
+      let date = document.getElementById('exportDate').value || today;
+      date = (normalizeDate(date) || date || today).substring(0, 10);
+      // 只可鎖到「今日」為止，唔會鎖未來預訂單
+      if (date > today) {
+        toast('所選日子係未來，鎖定會改為只鎖到今日（' + today + '）');
+        date = today;
+      }
+      if (!confirm('確定鎖定「' + date + '」及之前的訂單？\n（未來日子仍可預先落訂）\n鎖定後同事不能再新增／修改這些日子的訂單。')) return;
+      if (!apiUrl) {
+        toast('❌ 未連接 Firebase，無法全域鎖定（只會鎖呢部機）');
+        return;
+      }
+      try {
+        // 專用 setOrderLock，失敗要通知
+        const res = await callApi('setOrderLock', { lockUntil: date });
+        const saved = (res && res.lockUntil) ? String(res.lockUntil).substring(0, 10) : date;
+        orderLockUntil = saved;
+        localStorage.setItem('lunch_order_lock_until', orderLockUntil);
+      } catch (e) {
+        // fallback setSetting
+        try {
+          await callApi('setSetting', { key: 'order_lock_until', value: date });
+          orderLockUntil = date;
+          localStorage.setItem('lunch_order_lock_until', orderLockUntil);
+        } catch (e2) {
+          toast('❌ 鎖定寫入 Firebase 失敗：' + (e2.message || e.message) + '（其他裝置唔會鎖到）');
+          return;
+        }
+      }
+      updateOrderLockBanner();
+      try { populateDateSelects(); } catch (e) {}
+      toast('✅ 已全域鎖定 ' + orderLockUntil + ' 及之前（所有裝置生效）');
+    }
+
+    async function unlockOrders() {
+      if (!requireAdminPin('解除鎖定需要 PIN')) return;
+      if (!confirm('確定解除訂單鎖定？')) return;
+      if (apiUrl) {
+        try {
+          await callApi('setOrderLock', { lockUntil: '' });
+        } catch (e) {
+          try {
+            await callApi('setSetting', { key: 'order_lock_until', value: '' });
+          } catch (e2) {
+            toast('❌ 解除鎖定寫入失敗：' + (e2.message || e.message));
+            return;
+          }
+        }
+      }
+      orderLockUntil = '';
+      localStorage.removeItem('lunch_order_lock_until');
+      updateOrderLockBanner();
+      try { populateDateSelects(); } catch (e) {}
+      toast('✅ 已全域解除鎖定');
+    }
+
+
+    async function sendTodayOrderEmails() {
+      if (!requireAdminPin('發送 Email 需要 PIN')) return;
+      const targetDate = (document.getElementById('emailNotifyDate') || {}).value
+        || (document.getElementById('exportDate') || {}).value
+        || toDateKey(new Date());
+      const onlyUnpaid = !!(document.getElementById('emailOnlyUnpaid') || {}).checked;
+      const payme = (typeof PAYME_URL !== 'undefined' ? PAYME_URL : 'https://payme.hsbc/stephenhome07');
+
+      if (!confirm('確定準備並發送 Email 給「' + targetDate + '」有訂飯的同事？\n收件：initial@hoyu.edu.hk\n' +
+          (onlyUnpaid ? '（只限未付款）' : '（該日全部有單同事）'))) return;
+
+      const btn = document.getElementById('btnSendEmails');
+      const resultBox = document.getElementById('emailSendResult');
+      if (btn) { btn.disabled = true; btn.textContent = '讀取 Firebase 訂單並發送中…'; }
+      if (resultBox) {
+        resultBox.style.display = 'block';
+        resultBox.innerHTML = '<span style="color:var(--muted)">⏳ 正在從 Firebase 整理訂單及欠款，請稍候…</span>';
+      }
+
+      try {
+        let allOrders = localOrders.slice();
+        if (apiUrl) {
+          allOrders = (await callApi('getAllOrders') || []).map(normalizeOrder);
+        }
+        const dayCounts = {};
+        allOrders.forEach(o => {
+          if (!o.date) return;
+          dayCounts[o.date] = (dayCounts[o.date] || 0) + 1;
+        });
+        const effTotal = (o) => {
+          const meal = Number(o.mealPrice) || 0;
+          const drink = Number(o.drinkPrice) || 0;
+          let tw = (o.takeawayFee != null && o.takeawayFee !== '') ? Number(o.takeawayFee) : 1;
+          if (isNaN(tw)) tw = 1;
+          return Math.max(0, meal + drink + tw - getBulkDiscount(dayCounts[o.date] || 1));
+        };
+
+        const futureDates = [];
+        const base = new Date(targetDate + 'T12:00:00+08:00');
+        for (let fi = 1; fi <= 7; fi++) {
+          const fd = new Date(base.getTime() + fi * 86400000);
+          futureDates.push(toDateKey(fd));
+        }
+
+        const byInitial = {};
+        allOrders.forEach(o => {
+          if (o.date !== targetDate) return;
+          if (onlyUnpaid && o.paid) return;
+          const ini = String(o.initial || '').trim().toUpperCase();
+          if (!ini) return;
+          if (!byInitial[ini]) byInitial[ini] = [];
+          byInitial[ini].push(o);
+        });
+
+        const initials = Object.keys(byInitial).sort();
+        if (!initials.length) {
+          if (resultBox) {
+            resultBox.innerHTML = '<div style="padding:10px;background:#f0fdf4;border-radius:8px;border:1px solid #86efac">今日冇需要通知嘅訂單。</div>';
+          }
+          toast('沒有需要通知的訂單');
+          return;
+        }
+
+        const emailsPayload = initials.map(ini => {
+          const list = byInitial[ini];
+          const email = ini.toLowerCase() + '@hoyu.edu.hk';
+          const lines = [];
+          let todaySum = 0;
+          list.forEach(o => {
+            const eff = effTotal(o);
+            todaySum += eff;
+            let line = '• ' + (o.mealCode || '') + '. ' + (o.mealName || '');
+            if (o.drink) line += '｜飲品：' + o.drink;
+            line += '｜$' + eff + (o.paid ? '（已付）' : '（未付）');
+            lines.push(line);
+          });
+
+          let debtSum = 0;
+          const debtLines = [];
+          allOrders.forEach(o => {
+            if (String(o.initial || '').trim().toUpperCase() !== ini) return;
+            if (o.paid) return;
+            if (!o.date || o.date >= targetDate) return;
+            const eff = effTotal(o);
+            debtSum += eff;
+            debtLines.push('• ' + o.date + ' ' + (o.mealCode || '') + '. ' + (o.mealName || '') + ' $' + eff);
+          });
+
+          const payTotal = todaySum + debtSum;
+          const futureLines = [];
+          futureDates.forEach(fd => {
+            allOrders.forEach(o => {
+              if (String(o.initial || '').trim().toUpperCase() !== ini) return;
+              if (o.date !== fd) return;
+              futureLines.push('• ' + fd + ' ' + (o.mealCode || '') + '. ' + (o.mealName || '') + (o.drink ? '｜' + o.drink : ''));
+            });
+          });
+
+          const subject = '【六記訂飯】今日已為你落單';
+          let body = ini + ' 你好，\n\n';
+          body += '今日（' + targetDate + '）已為你落單如下：\n' + lines.join('\n') + '\n';
+          body += '今日應付：$' + todaySum + '\n';
+          if (debtSum > 0) {
+            body += '\n另有較早前未付欠款：$' + debtSum + '\n' + debtLines.join('\n') + '\n';
+            body += '（今日 + 舊欠）合共建議支付：$' + payTotal + '\n';
+          } else {
+            body += '目前沒有更早的未付欠款。\n';
+          }
+          body += '\nPayMe 過數：' + payme + '\n（或向負責人索取公司過數 QR Code）\n';
+          body += '\n—— 未來一星期訂飯 ——\n';
+          body += futureLines.length ? (futureLines.join('\n') + '\n') : '未來日子尚未有訂飯記錄。\n';
+          body += '\n【溫馨提示】最遲請於每天 10:00 前完成訂飯，以免趕不及落單。\n';
+          body += '\n此信由六記訂飯系統自動發出，如有錯漏請盡快聯絡負責人。\n';
+
+          return { initial: ini, to: email, subject, body, todaySum, debtSum };
+        });
+
+        if (mailGasUrl) {
+          const res = await fetch(mailGasUrl, {
+            method: 'POST',
+            body: JSON.stringify({
+              action: 'sendBatchEmails',
+              emails: emailsPayload,
+              date: targetDate,
+              onlyUnpaid: onlyUnpaid,
+              paymeUrl: payme
+            })
+          });
+          const raw = await res.json();
+          if (raw && raw.error && String(raw.error).indexOf('Unknown action') >= 0) {
+            throw new Error('請把附帶的 mail_relay.gs.txt 內容貼到你的 Google Apps Script 並部署新版本（毋須再連 Google Sheet），即可直接發送 Firebase 訂單電郵！');
+          }
+          if (raw && raw.error) throw new Error(raw.error);
+          const r = raw.result || raw;
+          const sent = r.sent || 0;
+          const failed = r.failed || 0;
+          let htmlOut = '<div style="padding:10px;background:#f0fdf4;border-radius:8px;border:1px solid #86efac">';
+          htmlOut += '<strong>✅ 已發送 ' + sent + ' 封</strong>';
+          if (failed) htmlOut += ' · <span style="color:var(--danger)">失敗 ' + failed + ' 封</span>';
+          if (r.sentList && r.sentList.length) {
+            htmlOut += '<div style="margin-top:6px;font-size:.8rem">' +
+              r.sentList.map(x => x.initial + ' → ' + x.email + '（今日$' + x.todaySum + (x.debtSum ? ' +舊欠$' + x.debtSum : '') + '）').join('<br>') + '</div>';
+          }
+          if (r.failedList && r.failedList.length) {
+            htmlOut += '<div style="margin-top:6px;color:var(--danger);font-size:.8rem">' +
+              r.failedList.map(x => x.initial + '：' + (x.error || '失敗')).join('<br>') + '</div>';
+          }
+          htmlOut += '</div>';
+          if (resultBox) resultBox.innerHTML = htmlOut;
+          toast('Email 完成：成功 ' + sent + (failed ? '，失敗 ' + failed : ''));
+        } else {
+          let htmlOut = '<div style="padding:10px;background:#fffbeb;border-radius:8px;border:1px solid #fcd34d">';
+          htmlOut += '<strong>ℹ️ 未設定自動寄信 Webhook，你可撳下方按鈕直接用電郵軟件寄出（共 ' + emailsPayload.length + ' 位）：</strong><div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">';
+          emailsPayload.forEach(item => {
+            const mailto = 'mailto:' + encodeURIComponent(item.to) + '?subject=' + encodeURIComponent(item.subject) + '&body=' + encodeURIComponent(item.body);
+            htmlOut += `<a class="btn btn-secondary" style="padding:6px 10px;font-size:.8rem;text-decoration:none" href="${mailto}" target="_blank">✉️ 寄俾 ${item.initial} ($${item.todaySum + item.debtSum})</a>`;
+          });
+          htmlOut += '</div></div>';
+          if (resultBox) resultBox.innerHTML = htmlOut;
+        }
+      } catch (e) {
+        const msg = String(e.message || e);
+        if (resultBox) {
+          resultBox.innerHTML = '<div style="color:var(--danger);padding:10px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca">❌ ' + msg + '</div>';
+        }
+        toast('發送失敗：' + msg);
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '📧 一鍵發送 Email'; }
+      }
+    }
+
+    function copyExport() {
+      const ta = document.getElementById('exportText');
+      ta.select();
+      navigator.clipboard.writeText(ta.value).then(() => toast('已複製！可直接貼到 WhatsApp')).catch(() => {
+        document.execCommand('copy');
+        toast('已複製');
+      });
+    }
+
+    // ===================== 拎飯人 =====================
+
+    const WEEKDAY_LABELS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+
+    function getWeekdayKey(dateStr) {
+      const d = dateStr ? new Date(dateStr + 'T12:00:00') : new Date();
+      if (isNaN(d.getTime())) return new Date().getDay();
+      return d.getDay(); // 0=Sun
+    }
+
+    function getPickupForDate(dateStr) {
+      const wd = getWeekdayKey(dateStr);
+      if (pickupByWeekday[String(wd)]) return pickupByWeekday[String(wd)];
+      if (pickupByWeekday[wd]) return pickupByWeekday[wd];
+      // 兼容舊「按日子」
+      const dk = normalizeDate(dateStr) || dateStr;
+      if (dk && pickupByDateMap[dk]) return pickupByDateMap[dk];
+      return pickupPerson || '';
+    }
+
+    function refreshPickupDisplay() {
+      const today = toDateKey(new Date());
+      const person = getPickupForDate(today);
+      pickupPerson = person;
+      const el = document.getElementById('pickupPerson');
+      if (el) el.textContent = person || '未設定';
+      const adm = document.getElementById('adminPickupToday');
+      if (adm) adm.textContent = person || '未設定';
+    }
+
+    function renderWeekdayPickupFields() {
+      // 工作日優先：一至五，再六日
+      const order = [1, 2, 3, 4, 5, 6, 0];
+      const html = order.map(wd => {
+        const val = pickupByWeekday[String(wd)] || pickupByWeekday[wd] || '';
+        return `<div class="row" style="margin-bottom:8px;align-items:center">
+          <div style="min-width:80px;font-weight:600">${WEEKDAY_LABELS[wd]}</div>
+          <div style="flex:1"><input type="text" class="weekday-pickup-input" data-wd="${wd}" value="${String(val).replace(/"/g, '&quot;')}" placeholder="Initial / 名字" /></div>
+        </div>`;
+      }).join('');
+      const a = document.getElementById('weekdayPickupFields');
+      const b = document.getElementById('weekdayPickupFieldsAdmin');
+      if (a) a.innerHTML = html;
+      if (b) b.innerHTML = html;
+    }
+
+    async function savePickupByWeekday() {
+      const inputs = document.querySelectorAll('.weekday-pickup-input');
+      // 兩邊 DOM 可能重複，用 Map 最後寫入為準
+      const map = {};
+      inputs.forEach(inp => {
+        map[String(inp.dataset.wd)] = (inp.value || '').trim();
+      });
+      pickupByWeekday = map;
+      localStorage.setItem('lunch_pickup_by_weekday', JSON.stringify(pickupByWeekday));
+      refreshPickupDisplay();
+      if (apiUrl) {
+        try {
+          await callApi('setSetting', { key: 'pickup_by_weekday', value: JSON.stringify(pickupByWeekday) });
+        } catch (e) { console.warn(e); }
+      }
+      toast('已儲存各星期拎飯人');
+      renderWeekdayPickupFields();
+      if (typeof loadOverview === 'function') {
+        try { loadOverview(); } catch (e) {}
+      }
+    }
+
+    function editPickup() {
+      const wd = getWeekdayKey();
+      const cur = getPickupForDate(toDateKey(new Date()));
+      const v = prompt('設定「' + WEEKDAY_LABELS[wd] + '」拎飯人（每週循環）', cur);
+      if (v !== null) {
+        pickupByWeekday[String(wd)] = v.trim();
+        localStorage.setItem('lunch_pickup_by_weekday', JSON.stringify(pickupByWeekday));
+        refreshPickupDisplay();
+        renderWeekdayPickupFields();
+        if (apiUrl) callApi('setSetting', { key: 'pickup_by_weekday', value: JSON.stringify(pickupByWeekday) }).catch(()=>{});
+        toast('已更新 ' + WEEKDAY_LABELS[wd] + ' 拎飯人');
+      }
+    }
+
+    function savePickup() {
+      // 改為按星期儲存（見 savePickupByWeekday）
+      savePickupByWeekday();
+    }
+
+    // ===================== 菜單匯入 =====================
+    function importMenus(replaceAll = false) {
+      const raw = document.getElementById('importJson').value.trim();
+      if (!raw) { toast('請貼上 JSON'); return; }
+      if (replaceAll && !requireAdminPin('覆蓋全部菜單需要 PIN')) return;
+      try {
+        let cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+        const data = JSON.parse(cleaned);
+        if (!Array.isArray(data)) throw new Error('必須是陣列 [ {...}, ... ]');
+        data.forEach(item => {
+          if (!item.code || !item.name || item.price == null) {
+            throw new Error('每項需要 code, name, price（固定套餐 date 填 *）。問題：' + JSON.stringify(item).slice(0,80));
+          }
+        });
+        if (apiUrl) {
+          callApi('importMenus', { items: data, replace: !!replaceAll }).then((res) => {
+            toast('✅ 已寫入 Firebase（目前共 ' + ((res && res.total) || data.length) + ' 項）');
+            loadMenus().then(() => { populateDateSelects(); renderMeals(); });
+          }).catch(e => toast('寫入 Firebase 失敗：' + e.message));
+        } else {
+          applyMenuRows(data);
+          localStorage.setItem('lunch_menus_cache', JSON.stringify(data));
+          populateDateSelects();
+          renderMeals();
+          toast('✅ 已匯入本機（' + data.length + ' 項）。設定 Firebase 後可同步上雲端');
+        }
+      } catch (e) {
+        toast('匯入失敗：' + e.message);
+        console.error(e);
+      }
+    }
+
+    function showPrompt() {
+      document.getElementById('promptBox').classList.toggle('hidden');
+    }
+
+    function buildAiPrompt() {
+      const prompt = `你是一個菜單資料擷取助手。我會上傳「六記」茶餐廳的每日飯單圖片（通常是香港茶記風格，有日期如 28/10 (三)、A-G 選項、價錢）。
+
+請你嚴格按照以下 JSON 格式輸出，不要加任何解釋或 markdown 標記：
+
+[
+  {"date":"YYYY-MM-DD","code":"A","name":"菜名","price":52},
+  {"date":"YYYY-MM-DD","code":"B","name":"菜名","price":50},
+  ...
+]
+
+規則：
+1. date 必須轉成 ISO 格式 YYYY-MM-DD（年份請用圖片所屬年份，若不明則用當前年份）。
+2. code 保持 A、B、C、D、E、F、G。
+3. name 用繁體中文，盡量完整保留原名。
+4. price 只取數字（不要 $ 符號）。
+5. 如果同一日有多個 A-G，全部列出。
+6. 固定套餐（酸辣米線、快餐等）用 date:"*" ，例如 {"date":"*","code":"SET1","name":"酸辣米線套餐","price":48}
+7. 如果圖片有多個日期，全部輸出在同一個陣列。
+8. 只輸出 JSON 陣列，不要其他文字。
+
+現在請處理我上傳的菜單圖片：`;
+      document.getElementById('aiPrompt').value = prompt;
+    }
+
+    function copyPrompt() {
+      const ta = document.getElementById('aiPrompt');
+      ta.select();
+      navigator.clipboard.writeText(ta.value).then(() => toast('Prompt 已複製')).catch(() => {
+        document.execCommand('copy');
+        toast('已複製');
+      });
+    }
+
+    // ===================== API 呼叫（Chrome 相容：排隊 + 重試）=====================
+    function showConnBar(msg, type) {
+      const bar = document.getElementById('connBar');
+      const el = document.getElementById('connMsg');
+      if (!bar || !el) return;
+      bar.style.display = 'flex';
+      el.textContent = msg;
+      if (type === 'err') { bar.style.background = '#fef2f2'; bar.style.border = '1px solid #fecaca'; bar.style.color = '#991b1b'; }
+      else if (type === 'warn') { bar.style.background = '#fffbeb'; bar.style.border = '1px solid #fcd34d'; bar.style.color = '#92400e'; }
+      else if (type === 'ok') { bar.style.background = '#f0fdf4'; bar.style.border = '1px solid #86efac'; bar.style.color = '#166534'; }
+      else { bar.style.background = '#f0ebe3'; bar.style.border = '1px solid #ddd'; bar.style.color = '#333'; }
+    }
+
+    function hideConnBar() {
+      const bar = document.getElementById('connBar');
+      if (bar) bar.style.display = 'none';
+    }
+
+    function openInBrowser() {
+      const url = location.href.split('#')[0];
+      toast('請用系統瀏覽器開啟（Safari / Chrome / Samsung Internet）');
+      try { window.open(url, '_blank'); } catch (e) {}
+      const a = document.createElement('a');
+      a.href = url; a.target = '_blank'; a.rel = 'noopener';
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { try { document.body.removeChild(a); } catch (e) {} }, 500);
+    }
+
+    function isChromeMobile() {
+      const ua = navigator.userAgent || '';
+      return /Chrome/i.test(ua) && /Mobile|Android/i.test(ua) && !/Edg|OPR|SamsungBrowser/i.test(ua);
+    }
+
+    // 串列佇列：Chrome 同時多個 script.google.com 請求會被節流導致超時
+    let _apiQueue = Promise.resolve();
+    function enqueueApi(fn) {
+      const run = _apiQueue.then(() => fn(), () => fn());
+      // 下一個等上一個完成（成功或失敗都繼續）
+      _apiQueue = run.then(() => {}, () => {});
+      return run;
+    }
+
+    function delay(ms) {
+      return new Promise(r => setTimeout(r, ms));
+    }
+
+
+
+    let _lockPollTimer = null;
+    function startOrderLockPolling() {
+      if (_lockPollTimer) return;
+      _lockPollTimer = setInterval(() => {
+        if (apiUrl) loadRemoteSettings().catch(() => {});
+      }, 45000);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && apiUrl) {
+          loadRemoteSettings().catch(() => {});
+        }
+      });
+    }
+
+    async function loadRemoteSettings() {
+      if (!apiUrl) {
+        updateOrderLockBanner();
+        return;
+      }
+      try {
+        const allSettings = await fbRequest('settings', 'GET');
+        if (allSettings && typeof allSettings === 'object') {
+          const lockVal = allSettings.order_lock_until != null ? String(allSettings.order_lock_until).trim() : '';
+          if (/^\d{4}-\d{2}-\d{2}/.test(lockVal)) {
+            orderLockUntil = lockVal.substring(0, 10);
+            localStorage.setItem('lunch_order_lock_until', orderLockUntil);
+          } else {
+            orderLockUntil = '';
+            localStorage.removeItem('lunch_order_lock_until');
+          }
+          if (allSettings.pickup_by_weekday) {
+            try {
+              pickupByWeekday = typeof allSettings.pickup_by_weekday === 'string'
+                ? JSON.parse(allSettings.pickup_by_weekday)
+                : allSettings.pickup_by_weekday;
+              localStorage.setItem('lunch_pickup_by_weekday', JSON.stringify(pickupByWeekday));
+            } catch (e) {}
+          }
+          Object.keys(allSettings).forEach(k => {
+            if (k.startsWith('drinkpref_')) {
+              const ini = k.slice('drinkpref_'.length).toUpperCase();
+              try {
+                const parsed = typeof allSettings[k] === 'string' ? JSON.parse(allSettings[k]) : allSettings[k];
+                if (parsed && typeof parsed === 'object') {
+                  drinkPrefs[ini] = parsed;
+                  if (!knownInitials.includes(ini)) knownInitials.push(ini);
+                }
+              } catch (e) {}
+            }
+          });
+          localStorage.setItem('lunch_drink_prefs', JSON.stringify(drinkPrefs));
+          localStorage.setItem('lunch_initials', JSON.stringify(knownInitials));
+          populateInitials();
+        }
+      } catch (e) { console.warn('loadRemoteSettings error:', e); }
+      refreshPickupDisplay();
+      renderWeekdayPickupFields();
+      updateOrderLockBanner();
+      if (typeof MENUS !== 'undefined' && Object.keys(MENUS).length) {
+        try { populateDateSelects(); } catch (e) {}
+      }
+    }
+
+    // ===================== Firebase 即時監聽 (Server-Sent Events) =====================
+    let _fbEventSource = null;
+    function startRealtimeSync() {
+      if (!apiUrl || typeof EventSource === 'undefined') return;
+      if (_fbEventSource) {
+        try { _fbEventSource.close(); } catch (e) {}
+      }
+      try {
+        _fbEventSource = new EventSource(apiUrl + '/settings.json');
+        _fbEventSource.addEventListener('put', () => { loadRemoteSettings().catch(() => {}); });
+        _fbEventSource.addEventListener('patch', () => { loadRemoteSettings().catch(() => {}); });
+      } catch (e) {
+        console.warn('SSE realtime listener skipped:', e);
+      }
+    }
+
+    // ===================== Firebase REST 核心通訊 =====================
+    async function fbRequest(path, method = 'GET', body = undefined, query = '') {
+      if (!apiUrl) throw new Error('尚未設定 Firebase Database URL');
+      const cleanPath = String(path || '').replace(/^\/+|\/+$/g, '');
+      const url = apiUrl + (cleanPath ? '/' + cleanPath : '') + '.json' + (query ? '?' + query : '');
+      const opts = { method };
+      if (body !== undefined) {
+        opts.headers = { 'Content-Type': 'application/json' };
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(url, opts);
+      if (!res.ok) {
+        let errText = res.status + ' ' + res.statusText;
+        try {
+          const ej = await res.json();
+          if (ej && ej.error) errText = ej.error;
+        } catch (e) {}
+        if (res.status === 401 || res.status === 403) {
+          throw new Error('Firebase 權限不足 (' + errText + ')，請在 Firebase Console → Realtime Database → 規則 (Rules) 開放讀寫。');
+        }
+        throw new Error('Firebase 請求失敗：' + errText);
+      }
+      return await res.json();
+    }
+
+    function fbSafeKey(k) {
+      return String(k || '').trim().replace(/[.#$\/\[\]]/g, '_');
+    }
+
+    async function getOrderLockFromFb() {
+      const raw = await fbRequest('settings/order_lock_until', 'GET');
+      if (!raw) return '';
+      const s = String(raw).trim();
+      return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.substring(0, 10) : '';
+    }
+
+    async function readAllOrdersFromFb() {
+      const data = await fbRequest('orders', 'GET');
+      if (!data) return [];
+      const arr = Array.isArray(data) ? data.filter(Boolean) : Object.values(data).filter(Boolean);
+      return arr.map(normalizeOrder).sort((a, b) => String(a.timestamp || '').localeCompare(String(b.timestamp || '')));
+    }
+
+    async function callApi(action, payload = {}) {
+      if (!apiUrl) throw new Error('未設定 Firebase Database URL');
+
+      if (action === 'ping') {
+        await fbRequest('settings/order_lock_until', 'GET');
+        return { ok: true, msg: 'Firebase Connected' };
+      }
+      else if (action === 'addOrder') {
+        const lockUntil = await getOrderLockFromFb();
+        const orderDate = payload.date ? String(payload.date).substring(0, 10) : '';
+        if (lockUntil && orderDate && orderDate <= lockUntil) {
+          throw new Error('訂單已鎖定（鎖至 ' + lockUntil + '），不能再落「' + orderDate + '」或更早的單。請聯絡負責人。');
+        }
+        const id = fbSafeKey(payload.id || (Date.now().toString(36) + Math.random().toString(36).slice(2, 6)));
+        const orderObj = normalizeOrder(Object.assign({}, payload, { id }));
+        await fbRequest('orders/' + id, 'PUT', orderObj);
+        return { ok: true, id };
+      }
+      else if (action === 'getOrders') {
+        const all = await readAllOrdersFromFb();
+        return payload.date ? all.filter(o => String(o.date) === String(payload.date)) : all;
+      }
+      else if (action === 'getAllUnpaid') {
+        const all = await readAllOrdersFromFb();
+        return all.filter(o => !o.paid);
+      }
+      else if (action === 'getAllOrders') {
+        return await readAllOrdersFromFb();
+      }
+      else if (action === 'getMenus') {
+        const data = await fbRequest('menus', 'GET');
+        if (!data) return [];
+        const rows = Array.isArray(data) ? data.filter(Boolean) : Object.values(data).filter(Boolean);
+        return rows.map(r => {
+          const code = r.code != null ? String(r.code).trim() : '';
+          let date = r.date != null ? String(r.date).trim() : '';
+          if (/^SET/i.test(code) || date === '*' || date === 'FIXED' || date === '每天' || date === '固定' || !date) {
+            date = '*';
+          } else {
+            date = normalizeDate(date);
+          }
+          return {
+            date,
+            code,
+            name: r.name != null ? String(r.name).trim() : '',
+            price: Number(r.price) || 0
+          };
+        }).filter(o => o.code || o.name);
+      }
+      else if (action === 'markPaid') {
+        const id = fbSafeKey(payload.id);
+        if (!id) throw new Error('缺少訂單 ID');
+        await fbRequest('orders/' + id, 'PATCH', { paid: true });
+        return { ok: true };
+      }
+      else if (action === 'markAllPaid') {
+        const target = String(payload.initial || '').trim().toUpperCase();
+        const all = await readAllOrdersFromFb();
+        const patchObj = {};
+        let count = 0;
+        all.forEach(o => {
+          if (String(o.initial || '').toUpperCase() === target && !o.paid && o.id) {
+            patchObj[fbSafeKey(o.id) + '/paid'] = true;
+            count++;
+          }
+        });
+        if (count > 0) {
+          await fbRequest('orders', 'PATCH', patchObj);
+        }
+        return { ok: true, count };
+      }
+      else if (action === 'deleteOrder') {
+        const id = fbSafeKey(payload.id);
+        if (!id) throw new Error('缺少訂單 ID');
+        const existing = await fbRequest('orders/' + id, 'GET');
+        if (existing) {
+          const lockUntilDel = await getOrderLockFromFb();
+          const od = existing.date ? String(existing.date).substring(0, 10) : '';
+          if (lockUntilDel && od && od <= lockUntilDel && !payload.forceAdmin) {
+            throw new Error('此日訂單已鎖定（鎖至 ' + lockUntilDel + '），不能刪除。請負責人先解除鎖定。');
+          }
+          await fbRequest('orders/' + id, 'DELETE');
+        }
+        return { ok: true };
+      }
+      else if (action === 'setSetting') {
+        const key = fbSafeKey(payload.key);
+        let val = payload.value == null ? '' : String(payload.value);
+        if (key === 'order_lock_until' && val) {
+          val = normalizeDate(val).substring(0, 10);
+        }
+        await fbRequest('settings/' + key, 'PUT', val);
+        return { ok: true, key, value: val };
+      }
+      else if (action === 'getSetting') {
+        const key = fbSafeKey(payload.key);
+        const val = await fbRequest('settings/' + key, 'GET');
+        return val == null ? '' : (typeof val === 'string' ? val : JSON.stringify(val));
+      }
+      else if (action === 'getOrderLock') {
+        const lockUntil = await getOrderLockFromFb();
+        return { lockUntil };
+      }
+      else if (action === 'setOrderLock') {
+        let lockDate = payload.lockUntil || payload.value || '';
+        if (lockDate) lockDate = normalizeDate(lockDate).substring(0, 10);
+        else lockDate = '';
+        await fbRequest('settings/order_lock_until', 'PUT', lockDate);
+        return { ok: true, lockUntil: lockDate };
+      }
+      else if (action === 'importMenus') {
+        let items = payload.items;
+        if (typeof items === 'string') {
+          try { items = JSON.parse(items); } catch (e) { items = []; }
+        }
+        if (!Array.isArray(items) || !items.length) return { ok: true, count: 0, total: 0 };
+        const cleanNew = items.map(it => ({
+          date: (!it.date || it.date === '*' || /^SET/i.test(String(it.code || ''))) ? '*' : normalizeDate(it.date),
+          code: String(it.code || '').trim(),
+          name: String(it.name || '').trim(),
+          price: Number(it.price) || 0
+        }));
+
+        let finalMenus = [];
+        if (payload.replace) {
+          finalMenus = cleanNew;
+        } else {
+          const existingRaw = await fbRequest('menus', 'GET');
+          const existing = !existingRaw ? [] : (Array.isArray(existingRaw) ? existingRaw.filter(Boolean) : Object.values(existingRaw).filter(Boolean));
+          const map = new Map();
+          existing.forEach(m => {
+            if (m && m.code) map.set((m.date || '*') + '|' + m.code, m);
+          });
+          cleanNew.forEach(m => {
+            if (m && m.code) map.set((m.date || '*') + '|' + m.code, m);
+          });
+          finalMenus = Array.from(map.values());
+        }
+        await fbRequest('menus', 'PUT', finalMenus);
+        return { ok: true, count: cleanNew.length, total: finalMenus.length };
+      }
+
+      throw new Error('Unknown action: ' + action);
+    }
+
+    async function testConnection() {
+      if (!apiUrl) return false;
+      try {
+        await callApi('ping', {});
+        hideConnBar();
+        showConnBar('✅ 已連接 Firebase Realtime Database', 'ok');
+        setTimeout(hideConnBar, 2000);
+        return true;
+      } catch (e) {
+        console.warn('testConnection failed', e);
+        return false;
+      }
+    }
+
+    async function retryConnection() {
+      if (!apiUrl) {
+        document.getElementById('configBox').classList.remove('hidden');
+        toast('請先輸入 Firebase Database URL');
+        return;
+      }
+      showConnBar('正在重新連線 Firebase…', '');
+      toast('重新連線中…');
+      const ok = await testConnection();
+      await loadRemoteSettings();
+      startRealtimeSync();
+      await loadMenus();
+      populateDateSelects();
+      renderMeals();
+      await loadOrders();
+      await loadDebts();
+      generateExport();
+      if (ok) {
+        showConnBar('✅ 已連接 Firebase Realtime Database', 'ok');
+        setTimeout(hideConnBar, 2500);
+        toast('連線成功');
+      } else {
+        showConnBar('❌ 無法連接 Firebase，請檢查網址與安全規則 (Rules)。', 'err');
+        toast('連線失敗');
+      }
+    }
+
+    function saveApiUrl() {
+      let v = cleanFbUrl(document.getElementById('apiUrlInput').value);
+      const m = (document.getElementById('mailGasUrlInput') || {}).value || '';
+      if (v && !/^https:\/\/.+(firebaseio\.com|firebasedatabase\.app)$/i.test(v)) {
+        alert('Firebase Database URL 格式不正確！\n應該類似：\nhttps://xxx-default-rtdb.asia-southeast1.firebasedatabase.app');
+        return;
+      }
+      apiUrl = v;
+      mailGasUrl = m.trim();
+      if (apiUrl) localStorage.setItem('lunch_firebase_url', apiUrl);
+      else localStorage.removeItem('lunch_firebase_url');
+      if (mailGasUrl) localStorage.setItem('lunch_mail_gas_url', mailGasUrl);
+      else localStorage.removeItem('lunch_mail_gas_url');
+
+      document.getElementById('configBox').classList.add('hidden');
+      toast('✅ Firebase 設定已儲存');
+      retryConnection();
+    }
+
+    async function exportFullDatabaseJson() {
+      if (!apiUrl) { toast('請先連接 Firebase'); return; }
+      try {
+        toast('⏳ 正在下載備份…');
+        const fullData = await fbRequest('', 'GET');
+        const blob = new Blob([JSON.stringify(fullData || {}, null, 2)], { type: 'application/json;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'hoyu_lunch_firebase_backup_' + toDateKey(new Date()) + '.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        toast('✅ 備份已下載');
+      } catch (e) {
+        toast('下載備份失敗：' + e.message);
+      }
+    }
+
+    async function importFullDatabaseJson(event) {
+      const file = event.target && event.target.files && event.target.files[0];
+      if (!file) return;
+      if (!apiUrl) {
+        alert('請先在上方設定並儲存 Firebase Realtime Database URL，然後再匯入 JSON！');
+        event.target.value = '';
+        return;
+      }
+      if (!requireAdminPin('匯入資料庫 JSON 需要管理 PIN')) {
+        event.target.value = '';
+        return;
+      }
+      try {
+        const text = await file.text();
+        const json = JSON.parse(text);
+        if (!json || typeof json !== 'object' || (!json.orders && !json.menus && !json.settings)) {
+          throw new Error('JSON 格式不符（需包含 orders / menus / settings 節點）');
+        }
+        const oCount = json.orders ? Object.keys(json.orders).length : 0;
+        const mCount = Array.isArray(json.menus) ? json.menus.length : (json.menus ? Object.keys(json.menus).length : 0);
+        if (!confirm(`確定將此 JSON 寫入 Firebase？（會覆蓋同名節點）\n• 訂單：${oCount} 筆\n• 菜單：${mCount} 項`)) {
+          event.target.value = '';
+          return;
+        }
+        toast('⏳ 正在寫入 Firebase…');
+        await fbRequest('', 'PUT', json);
+        toast('✅ 成功匯入 Firebase！正在重新載入…');
+        await retryConnection();
+      } catch (e) {
+        toast('❌ 匯入失敗：' + e.message);
+      } finally {
+        event.target.value = '';
+      }
+    }
+
+    function clearLocalCache() {
+      if (!confirm('清除本機快取？\n（不會刪除 Firebase 雲端資料）')) return;
+      hardResetSite(false);
+    }
+
+    async function hardResetSite(ask) {
+      if (ask !== false) {
+        if (!confirm('清除此網站的本機快取並強制重新載入？\n（不會刪除 Firebase 雲端資料）')) return;
+      }
+      const keepFb = apiUrl;
+      const keepMail = mailGasUrl;
+      try {
+        const keys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && (k.indexOf('lunch') >= 0 || k.indexOf('api') >= 0)) keys.push(k);
+        }
+        keys.forEach(k => localStorage.removeItem(k));
+        if (keepFb) localStorage.setItem('lunch_firebase_url', keepFb);
+        if (keepMail) localStorage.setItem('lunch_mail_gas_url', keepMail);
+      } catch (e) { console.warn(e); }
+      try {
+        if (window.caches && caches.keys) {
+          const names = await caches.keys();
+          await Promise.all(names.map(n => caches.delete(n)));
+        }
+      } catch (e) { console.warn(e); }
+      const u = new URL(location.href);
+      u.searchParams.set('_r', String(Date.now()));
+      location.replace(u.toString());
+    }
+
+    function copyPayMeLink() {
+      const url = (typeof PAYME_URL !== 'undefined' && PAYME_URL) ? PAYME_URL : 'https://payme.hsbc/stephenhome07';
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(() => toast('PayMe 連結已複製')).catch(() => prompt('請手動複製：', url));
+      } else {
+        prompt('請手動複製：', url);
+      }
+    }
+
+    function toast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 2800);
+    }
+
+    function toggleSetupHelp() {
+      document.getElementById('setupHelp').classList.toggle('hidden');
+    }
+
+    function buildSetupHelp() {
+      document.getElementById('setupHelp').textContent = SETUP_TEXT;
+    }
+
+    // ===================== Firebase 遷移與設定教學 =====================
+    const SETUP_TEXT = `
+【六記訂飯 · Firebase + GitHub Pages 完整設定指南】
+
+步驟 1：建立免費 Firebase Realtime Database
+1. 前往 https://console.firebase.google.com/ 並用 Google 帳號登入
+2. 按「新增專案 (Create a project)」，輸入名稱（如 hoyu-lunch），關閉 Google Analytics 即可快速建立
+3. 左側選單按「建構 (Build)」→「Realtime Database」→「建立資料庫 (Create Database)」
+4. 地區建議選「新加坡 (asia-southeast1)」→ 安全性規則先選「鎖定模式」或「測試模式」皆可
+5. 建立後，進入「規則 (Rules)」分頁，貼上以下規則並按「發布 (Publish)」：
+
+{
+  "rules": {
+    "orders": {
+      ".read": true,
+      ".indexOn": ["date", "initial", "paid"],
+      "$orderId": {
+        ".write": true
+      }
+    },
+    "menus": {
+      ".read": true,
+      ".write": true
+    },
+    "settings": {
+      ".read": true,
+      ".write": true
+    }
+  }
+}
+
+步驟 2：一鍵匯入你原本 Google Sheet 的舊資料
+1. 在 Realtime Database「資料 (Data)」分頁右上角按「⋮」→「匯入 JSON (Import JSON)」
+2. 選擇系統為你產生的 firebase_import.json（已包含全部 214 筆去重訂單、360 項菜單及 26 項飲品/拎飯設定）
+   ※ 或者：先在網頁貼上 Database URL 儲存，再到網頁「管理」分頁按「⬆️ 從 JSON 檔匯入至 Firebase」亦可！
+
+步驟 3：放上 GitHub Pages（全校同事免設定即用）
+1. 複製你在 Firebase 資料頁頂部見到的網址（例如 https://hoyu-lunch-default-rtdb.asia-southeast1.firebasedatabase.app）
+2. 打開本檔案 index.html，搜尋 DEFAULT_FIREBASE_DB_URL，填入該網址：
+   const DEFAULT_FIREBASE_DB_URL = 'https://你的網址.firebasedatabase.app';
+3. 將更新後的 index.html Commit 並 Push 上你原本的 GitHub Repository，網址完全不變！
+
+步驟 4（選填）：保留「一鍵寄 Email 去 @hoyu.edu.hk」功能
+由於純前端網頁（GitHub Pages + Firebase）本身沒有 SMTP 郵件伺服器，如你想繼續使用「匯出 WhatsApp」頁底的一鍵寄信功能：
+打開你原本的 Google Apps Script，貼上附帶的極簡 mail_relay.gs（無須再讀寫 Google Sheet，只負責幫 Firebase 代發 Gmail），部署新版本即可繼續一鍵發信！
+`;
+
+  </script>
+</body>
+</html>
